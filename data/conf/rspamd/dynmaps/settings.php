@@ -7,8 +7,6 @@ then any of these will trigger the rule. If a rule is triggered then no more rul
 header('Content-Type: text/plain');
 require_once "vars.inc.php";
 // Getting headers sent by the client.
-//$headers = apache_request_headers();
-
 ini_set('error_reporting', 0);
 
 //$dsn = $database_type . ':host=' . $database_host . ';dbname=' . $database_name;
@@ -28,15 +26,18 @@ catch (PDOException $e) {
 }
 
 // Check if db changed and return header
-/*$stmt = $pdo->prepare("SELECT UNIX_TIMESTAMP(UPDATE_TIME) AS `db_update_time` FROM information_schema.tables
-  WHERE `TABLE_NAME` = 'filterconf'
+/*
+$stmt = $pdo->prepare("SELECT MAX(UNIX_TIMESTAMP(UPDATE_TIME)) AS `db_update_time` FROM information_schema.tables
+  WHERE (`TABLE_NAME` = 'filterconf' OR `TABLE_NAME` = 'settingsmap')
     AND TABLE_SCHEMA = :dbname;");
 $stmt->execute(array(
   ':dbname' => $database_name
 ));
 $db_update_time = $stmt->fetch(PDO::FETCH_ASSOC)['db_update_time'];
-
-if (isset($headers['If-Modified-Since']) && (strtotime($headers['If-Modified-Since']) == $db_update_time)) {
+if (empty($db_update_time)) {
+  $db_update_time = 1572048000;
+}
+if (isset($_SERVER['HTTP_IF_MODIFIED_SINCE']) && (strtotime($_SERVER['HTTP_IF_MODIFIED_SINCE']) == $db_update_time)) {
   header('Last-Modified: '.gmdate('D, d M Y H:i:s', $db_update_time).' GMT', true, 304);
   exit;
 } else {
@@ -62,7 +63,9 @@ function wl_by_sogo() {
       if (!filter_var($contact, FILTER_VALIDATE_EMAIL)) {
         continue;
       }
-      $rcpt[$row['user']][] = '/^' . str_replace('/', '\/', $contact) . '$/i';
+      // Explicit from, no mime_from, no regex - envelope must match
+      // mailcow white and blacklists also cover mime_from
+      $rcpt[$row['user']][] = str_replace('/', '\/', $contact);
     }
   }
   return $rcpt;
@@ -86,7 +89,7 @@ function ucl_rcpts($object, $type) {
       if (!empty($local) && !empty($domain)) {
         $rcpt[] = '/^' . str_replace('/', '\/', $local) . '[+].*' . str_replace('/', '\/', $domain) . '$/i';
       }
-      $rcpt[] = '/^' . str_replace('/', '\/', $row['address']) . '$/i';
+      $rcpt[] = str_replace('/', '\/', $row['address']);
     }
     // Aliases by alias domains
     $stmt = $pdo->prepare("SELECT CONCAT(`local_part`, '@', `alias_domain`.`alias_domain`) AS `alias` FROM `mailbox` 
@@ -104,7 +107,7 @@ function ucl_rcpts($object, $type) {
         if (!empty($local) && !empty($domain)) {
           $rcpt[] = '/^' . str_replace('/', '\/', $local) . '[+].*' . str_replace('/', '\/', $domain) . '$/i';
         }
-      $rcpt[] = '/^' . str_replace('/', '\/', $row['alias']) . '$/i';
+        $rcpt[] = str_replace('/', '\/', $row['alias']);
       }
     }
   }
@@ -129,11 +132,14 @@ settings {
     rcpt_mime = "/null@localhost/i";
     from_mime = "/watchdog@localhost/i";
     apply "default" {
+      symbols_disabled = ["HISTORY_SAVE", "ARC", "ARC_SIGNED", "DKIM", "DKIM_SIGNED", "CLAM_VIRUS"];
+      want_spam = yes;
       actions {
         reject = 9999.0;
         greylist = 9998.0;
         "add header" = 9997.0;
       }
+
     }
   }
 <?php

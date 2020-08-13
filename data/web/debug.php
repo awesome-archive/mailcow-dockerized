@@ -4,12 +4,8 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/inc/prerequisites.inc.php';
 if (isset($_SESSION['mailcow_cc_role']) && $_SESSION['mailcow_cc_role'] == "admin") {
 require_once $_SERVER['DOCUMENT_ROOT'] . '/inc/header.inc.php';
 $_SESSION['return_to'] = $_SERVER['REQUEST_URI'];
-if (strtolower(getenv('SKIP_SOLR')) == 'n') {
-  $solr_status = solr_status();
-}
-else {
-  $solr_status = false;
-}
+$solr_status = (preg_match("/^([yY][eE][sS]|[yY])+$/", $_ENV["SKIP_SOLR"])) ? false : solr_status();
+$clamd_status = (preg_match("/^([yY][eE][sS]|[yY])+$/", $_ENV["SKIP_CLAMD"])) ? false : true;
 ?>
 <div class="container">
 
@@ -76,11 +72,17 @@ else {
                   <?php
                   if ($solr_status !== false):
                   ?>
-                  <p><?=$lang['debug']['solr_uptime'];?>: ~<?=round($solr_status['uptime'] / 1000 / 60 / 60);?>h</p>
-                  <p><?=$lang['debug']['solr_started_at'];?>: <?=$solr_status['startTime'];?></p>
-                  <p><?=$lang['debug']['solr_last_modified'];?>: <?=$solr_status['index']['lastModified'];?></p>
-                  <p><?=$lang['debug']['solr_size'];?>: <?=$solr_status['index']['size'];?></p>
-                  <p><?=$lang['debug']['solr_docs'];?>: <?=$solr_status['index']['numDocs'];?></p>
+                  <div class="progress">
+                    <div class="progress-bar progress-bar-info" role="progressbar" style="width:<?=round($solr_status['jvm']['memory']['raw']['used%']);?>%"></div>
+                  </div>
+                  <p><?=$lang['debug']['jvm_memory_solr'];?>: <?=$solr_status['jvm']['memory']['total'] - $solr_status['jvm']['memory']['free'];?> / <?=$solr_status['jvm']['memory']['total'];?>
+                    (<?=round($solr_status['jvm']['memory']['raw']['used%']);?>%)</p>
+                  <hr>
+                  <p><?=$lang['debug']['solr_uptime'];?>: ~<?=round($solr_status['status']['dovecot-fts']['uptime'] / 1000 / 60 / 60);?>h</p>
+                  <p><?=$lang['debug']['solr_started_at'];?>: <?=$solr_status['status']['dovecot-fts']['startTime'];?></p>
+                  <p><?=$lang['debug']['solr_last_modified'];?>: <?=$solr_status['status']['dovecot-fts']['index']['lastModified'];?></p>
+                  <p><?=$lang['debug']['solr_size'];?>: <?=$solr_status['status']['dovecot-fts']['index']['size'];?></p>
+                  <p><?=$lang['debug']['solr_docs'];?>: <?=$solr_status['status']['dovecot-fts']['index']['numDocs'];?></p>
                   <?php
                   else:
                   ?>
@@ -100,7 +102,10 @@ else {
             <ul class="list-group">
             <?php
             $containers = (docker('info'));
+            ksort($containers);
             foreach ($containers as $container => $container_info) {
+              if ($container == 'clamd-mailcow' && $clamd_status === false) { continue; }
+              if ($container == 'solr-mailcow' && $solr_status === false) { continue; }
               ?>
               <li class="list-group-item">
               <?=$container . ' (' . $container_info['Config']['Image'] . ')';?>
@@ -124,9 +129,9 @@ else {
                 $started = '?';
               }
               ?>
-              <small>(Started on <?=$started;?>),
+              <small>(<?=$lang['debug']['started_on'];?> <?=$started;?>),
               <a href data-toggle="modal" data-container="<?=$container;?>" data-target="#RestartContainer"><?=$lang['debug']['restart_container'];?></a></small>
-              <span class="pull-right label label-<?=($container_info['State'] !== false && !empty($container_info['State'])) ? (($container_info['State']['Running'] == 1) ? 'success' : 'danger') : 'default'; ?>">&nbsp;&nbsp;&nbsp;</span>
+              <span class="pull-right container-indicator label label-<?=($container_info['State'] !== false && !empty($container_info['State'])) ? (($container_info['State']['Running'] == 1) ? 'success' : 'danger') : 'default'; ?>">&nbsp;</span>
               </li>
               <?php
               }
@@ -231,7 +236,11 @@ else {
               </div>
             </div>
             <div class="panel-body">
-              <div id="rspamd_donut" style="height: 300px;"></div>
+              <legend><?=$lang['debug']['chart_this_server'];?></legend>
+              <div id="chart-container">
+                <canvas id="rspamd_donut" style="width:100%;height:400px"></canvas>
+              </div>
+              <legend><?=$lang['debug']['history_all_servers'];?></legend>
               <div class="table-responsive">
                 <table class="table table-striped table-condensed log-table" id="rspamd_history"></table>
               </div>

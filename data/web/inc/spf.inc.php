@@ -1,11 +1,11 @@
 <?php
 error_reporting(0);
 
-function get_spf_allowed_hosts($domain)
+function get_spf_allowed_hosts($check_domain)
 {
 	$hosts = array();
 	
-	$records = dns_get_record($domain, DNS_TXT);
+	$records = dns_get_record($check_domain, DNS_TXT);
 	foreach ($records as $record)
 	{
 		$txt = explode(' ', $record['entries'][0]);
@@ -33,6 +33,8 @@ function get_spf_allowed_hosts($domain)
 			else
 			{
 				unset($cidr);
+				// reset domain to check_domain
+				$domain = $check_domain;
 				if (strpos($mech, ':') !== FALSE) // handle a domain specification
 				{
 					$split = explode(':', $mech);
@@ -47,7 +49,7 @@ function get_spf_allowed_hosts($domain)
 				}
 				
 				$new_hosts = array();
-				if ($mech == 'include') // handle an inclusion
+        if ($mech == 'include' && $check_domain != $domain) // handle an inclusion
 				{
 					$new_hosts = get_spf_allowed_hosts($domain);
 				}
@@ -77,7 +79,11 @@ function get_spf_allowed_hosts($domain)
 			}
 		}
 	}
-	
+	foreach ($hosts as &$host) {
+		if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+			$host = expand_ipv6($host);
+		}
+	}
 	return $hosts;
 }
 

@@ -5,15 +5,35 @@ if (isset($_SESSION['mailcow_cc_role']) && $_SESSION['mailcow_cc_role'] == "admi
 require_once $_SERVER['DOCUMENT_ROOT'] . '/inc/header.inc.php';
 $_SESSION['return_to'] = $_SERVER['REQUEST_URI'];
 $tfa_data = get_tfa();
+if (!isset($_SESSION['gal']) && $license_cache = $redis->Get('LICENSE_STATUS_CACHE')) {
+  $_SESSION['gal'] = json_decode($license_cache, true);
+}
 ?>
 <div class="container">
 
   <ul class="nav nav-tabs" role="tablist">
     <li role="presentation" class="active"><a href="#tab-access" aria-controls="tab-access" role="tab" data-toggle="tab"><?=$lang['admin']['access'];?></a></li>
-    <li role="presentation"><a href="#tab-config" aria-controls="tab-config" role="tab" data-toggle="tab"><?=$lang['admin']['configuration'];?></a></li>
-    <li role="presentation"><a href="#tab-routing" aria-controls="tab-config" role="tab" data-toggle="tab"><?=$lang['admin']['routing'];?></a></li>
+    <li class="dropdown"><a class="dropdown-toggle" data-toggle="dropdown" href="#"><?=$lang['admin']['configuration'];?>
+      <span class="caret"></span></a>
+      <ul class="dropdown-menu">
+        <li role="presentation"><a href="#tab-config-dkim" aria-controls="tab-config-dkim" role="tab" data-toggle="tab"><?=$lang['admin']['dkim_keys'];?></a></li>
+        <li role="presentation"><a href="#tab-config-fwdhosts" aria-controls="tab-config-fwdhosts" role="tab" data-toggle="tab"><?=$lang['admin']['forwarding_hosts'];?></a></li>
+        <li role="presentation"><a href="#tab-config-f2b" aria-controls="tab-config-f2b" role="tab" data-toggle="tab"><?=$lang['admin']['f2b_parameters'];?></a></li>
+        <li role="presentation"><a href="#tab-config-quarantine" aria-controls="tab-config-quarantine" role="tab" data-toggle="tab"><?=$lang['admin']['quarantine'];?></a></li>
+        <li role="presentation"><a href="#tab-config-quota" aria-controls="tab-config-quota" role="tab" data-toggle="tab"><?=$lang['admin']['quota_notifications'];?></a></li>
+        <li role="presentation"><a href="#tab-config-rsettings" aria-controls="tab-config-rsettings" role="tab" data-toggle="tab"><?=$lang['admin']['rspamd_settings_map'];?></a></li>
+        <li role="presentation"><a href="#tab-config-customize" aria-controls="tab-config-customize" role="tab" data-toggle="tab"><?=$lang['admin']['customize'];?></a></li>
+      </ul>
+    </li>
+    <li role="presentation"><a href="#tab-routing" aria-controls="tab-routing" role="tab" data-toggle="tab"><?=$lang['admin']['routing'];?></a></li>
     <li role="presentation"><a href="#tab-sys-mails" aria-controls="tab-sys-mails" role="tab" data-toggle="tab"><?=$lang['admin']['sys_mails'];?></a></li>
     <li role="presentation"><a href="#tab-mailq" aria-controls="tab-mailq" role="tab" data-toggle="tab"><?=$lang['admin']['queue_manager'];?></a></li>
+    <li class="dropdown"><a class="dropdown-toggle" data-toggle="dropdown" href="#"><?=$lang['admin']['rspamd_global_filters'];?>
+      <span class="caret"></span></a>
+      <ul class="dropdown-menu">
+        <li role="presentation"><a href="#tab-globalfilter-regex" aria-controls="tab-globalfilter-regex" role="tab" data-toggle="tab"><?=$lang['admin']['regex_maps'];?></a></li>
+      </ul>
+    </li>
   </ul>
 
   <div class="row">
@@ -76,42 +96,142 @@ $tfa_data = get_tfa();
             </select>
           </div>
         </div>
-        <legend data-target="#api" style="margin-top:40px;cursor:pointer" class="arrow-toggle" unselectable="on" data-toggle="collapse">
-          <span style="font-size:12px" class="arrow rotate glyphicon glyphicon-menu-down"></span> API (experimental, work in progress)
+
+        <legend style="cursor:pointer;" data-target="#license" class="arrow-toggle" unselectable="on" data-toggle="collapse">
+          <span style="font-size:12px" class="arrow rotate glyphicon glyphicon-menu-up"></span> <?=$lang['admin']['guid_and_license'];?>
         </legend>
-        <?php
-        $api = admin_api('get');
-        ?>
-        <div id="api" class="collapse">
+        <div id="license" class="collapse in">
         <form class="form-horizontal" autocapitalize="none" autocorrect="off" role="form" method="post">
           <div class="form-group">
-            <label class="control-label col-sm-3" for="allow_from"><?=$lang['admin']['api_allow_from'];?>:</label>
+            <label class="control-label col-sm-3" for="guid"><?=$lang['admin']['guid'];?>:</label>
             <div class="col-sm-9">
-              <textarea class="form-control" rows="5" name="allow_from" id="allow_from" required><?=htmlspecialchars($api['allow_from']);?></textarea>
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="control-label col-sm-3" for="admin_api_key"><?=$lang['admin']['api_key'];?>:</label>
-            <div class="col-sm-9">
-              <input type="text" class="form-control" placeholder="-" value="<?=htmlspecialchars($api['api_key']);?>" readonly>
+              <div class="input-group">
+                <span class="input-group-addon">
+                  <span class="glyphicon <?=(isset($_SESSION['gal']['valid']) && $_SESSION['gal']['valid'] === "true") ? 'glyphicon-heart text-danger' : 'glyphicon-remove';?>" aria-hidden="true"></span>
+                </span>
+                <input type="text" id="guid" class="form-control" value="<?=license('guid');?>" readonly>
+              </div>
+              <p class="help-block">
+                <?=$lang['admin']['customer_id'];?>: <?=(isset($_SESSION['gal']['c'])) ? $_SESSION['gal']['c'] : '?';?> -
+                <?=$lang['admin']['service_id'];?>: <?=(isset($_SESSION['gal']['s'])) ? $_SESSION['gal']['s'] : '?';?> -
+                <?=$lang['admin']['sal_level'];?>: <?=(isset($_SESSION['gal']['m'])) ? $_SESSION['gal']['m'] : '?';?>
+              </p>
             </div>
           </div>
           <div class="form-group">
             <div class="col-sm-offset-3 col-sm-9">
-              <label>
-                <input type="checkbox" name="active" <?=($api['active'] == 1) ? 'checked' : null;?>> <?=$lang['admin']['activate_api'];?>
-              </label>
-            </div>
-          </div>
-          <div class="form-group">
-            <div class="col-sm-offset-3 col-sm-9">
+              <p class="help-block"><?=$lang['admin']['license_info'];?></p>
               <div class="btn-group">
-                <button class="btn btn-default" name="admin_api" type="submit" href="#"><span class="glyphicon glyphicon-check"></span> <?=$lang['admin']['save'];?></button>
-                <button class="btn btn-info" name="admin_api_regen_key" type="submit" href="#"><?=$lang['admin']['regen_api_key'];?></button>
+                <button class="btn btn-sm btn-success" name="license_validate_now" type="submit" href="#"><?=$lang['admin']['validate_license_now'];?></button>
               </div>
             </div>
           </div>
         </form>
+        </div>
+
+        <legend style="cursor:pointer;" data-target="#admin_api" class="arrow-toggle" unselectable="on" data-toggle="collapse">
+          <span style="font-size:12px" class="arrow rotate glyphicon glyphicon-menu-down"></span> API
+        </legend>
+        <div id="admin_api" class="collapse">
+        <div class="row">
+        <?php
+        $api_ro = admin_api('ro', 'get');
+        $api_rw = admin_api('rw', 'get');
+        ?>
+          <div class="col-lg-12">
+          <p class="help-block"><?=$lang['admin']['api_info'];?></p>
+          </div>
+          <div class="col-lg-6">
+            <div class="panel panel-default">
+              <div class="panel-heading">
+                <h4 class="panel-title">⇇ Read-Only Access</h4>
+              </div>
+                <div class="panel-body">
+                  <form class="form-horizontal" autocapitalize="none" autocorrect="off" role="form" method="post">
+                    <div class="form-group">
+                      <label class="control-label col-sm-3" for="allow_from_ro"><?=$lang['admin']['api_allow_from'];?>:</label>
+                      <div class="col-sm-9">
+                        <textarea class="form-control textarea-code" rows="7" name="allow_from" id="allow_from_ro" <?=($api_ro['skip_ip_check'] == 1) ? 'disabled' : null;?> required><?=htmlspecialchars($api_ro['allow_from']);?></textarea>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <div class="col-sm-offset-3 col-sm-9">
+                        <label>
+                          <input type="checkbox" name="skip_ip_check" id="skip_ip_check_ro" <?=($api_ro['skip_ip_check'] == 1) ? 'checked' : null;?>> <?=$lang['admin']['api_skip_ip_check'];?>
+                        </label>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <label class="control-label col-sm-3"><?=$lang['admin']['api_key'];?>:</label>
+                      <div class="col-sm-9">
+                        <pre><?=(empty(htmlspecialchars($api_ro['api_key']))) ? '-' : htmlspecialchars($api_ro['api_key']);?></pre>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <div class="col-sm-offset-3 col-sm-9">
+                        <label>
+                          <input type="checkbox" name="active" <?=($api_ro['active'] == 1) ? 'checked' : null;?>> <?=$lang['admin']['activate_api'];?>
+                        </label>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <div class="col-sm-offset-3 col-sm-9">
+                        <div class="btn-group">
+                          <button class="btn btn-sm btn-success" name="admin_api[ro]" type="submit" href="#"><span class="glyphicon glyphicon-check"></span> <?=$lang['admin']['save'];?></button>
+                          <button class="btn btn-sm btn-default admin-ays-dialog" name="admin_api_regen_key[ro]" type="submit" href="#"><?=$lang['admin']['regen_api_key'];?></button>
+                        </div>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="panel panel-default">
+              <div class="panel-heading">
+                <h4 class="panel-title">⇄ Read-Write Access</h4>
+              </div>
+                <div class="panel-body">
+                  <form class="form-horizontal" autocapitalize="none" autocorrect="off" role="form" method="post">
+                    <div class="form-group">
+                      <label class="control-label col-sm-3" for="allow_from_rw"><?=$lang['admin']['api_allow_from'];?>:</label>
+                      <div class="col-sm-9">
+                        <textarea class="form-control textarea-code" rows="7" name="allow_from" id="allow_from_rw" <?=($api_rw['skip_ip_check'] == 1) ? 'disabled' : null;?> required><?=htmlspecialchars($api_rw['allow_from']);?></textarea>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <div class="col-sm-offset-3 col-sm-9">
+                        <label>
+                          <input type="checkbox" name="skip_ip_check" id="skip_ip_check_rw" <?=($api_rw['skip_ip_check'] == 1) ? 'checked' : null;?>> <?=$lang['admin']['api_skip_ip_check'];?>
+                        </label>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <label class="control-label col-sm-3" for="admin_api_key"><?=$lang['admin']['api_key'];?>:</label>
+                      <div class="col-sm-9">
+                        <pre><?=(empty(htmlspecialchars($api_rw['api_key']))) ? '-' : htmlspecialchars($api_rw['api_key']);?></pre>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <div class="col-sm-offset-3 col-sm-9">
+                        <label>
+                          <input type="checkbox" name="active" <?=($api_rw['active'] == 1) ? 'checked' : null;?>> <?=$lang['admin']['activate_api'];?>
+                        </label>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <div class="col-sm-offset-3 col-sm-9">
+                        <div class="btn-group">
+                          <button class="btn btn-sm btn-success" name="admin_api[rw]" type="submit" href="#"><span class="glyphicon glyphicon-check"></span> <?=$lang['admin']['save'];?></button>
+                          <button class="btn btn-sm btn-default admin-ays-dialog" name="admin_api_regen_key[rw]" type="submit" href="#"><?=$lang['admin']['regen_api_key'];?></button>
+                        </div>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+            </div>
+          </div>
+        </div>
         </div>
       </div>
     </div>
@@ -141,6 +261,30 @@ $tfa_data = get_tfa();
     </div>
 
     <div class="panel panel-default">
+    <div class="panel-heading">OAuth2 Apps</div>
+        <div class="panel-body">
+          <p><?=$lang['admin']['oauth2_info'];?></p>
+          <div class="table-responsive">
+            <table class="table table-striped" id="oauth2clientstable"></table>
+          </div>
+          <div class="mass-actions-admin">
+            <div class="btn-group">
+              <a class="btn btn-sm btn-default" id="toggle_multi_select_all" data-id="oauth2_clients" href="#"><span class="glyphicon glyphicon-check" aria-hidden="true"></span> <?=$lang['mailbox']['toggle_all'];?></a>
+              <a class="btn btn-sm btn-default dropdown-toggle" data-toggle="dropdown" href="#"><?=$lang['mailbox']['quick_actions'];?> <span class="caret"></span></a>
+              <ul class="dropdown-menu">
+                <li><a data-action="delete_selected" data-id="oauth2_clients" data-api-url='delete/oauth2-client' href="#"><?=$lang['mailbox']['remove'];?></a></li>
+                <li role="separator" class="divider"></li>
+                <li><a data-action="edit_selected" data-id="oauth2_clients" data-api-url='edit/oauth2-client' data-api-attr='{"revoke_tokens":"1"}' href="#"><?=$lang['admin']['oauth2_revoke_tokens'];?></a></li>
+                <li role="separator" class="divider"></li>
+                <li><a data-action="edit_selected" data-id="oauth2_clients" data-api-url='edit/oauth2-client' data-api-attr='{"renew_secret":"1"}' href="#"><?=$lang['admin']['oauth2_renew_secret'];?></a></li>
+              </ul>
+              <a class="btn btn-sm btn-success" data-id="add_oauth2_client" data-toggle="modal" data-target="#addOAuth2ClientModal" href="#"><span class="glyphicon glyphicon-plus"></span> Add OAuth2 client</a>
+            </div>
+          </div>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
       <div class="panel-heading">
         <h3 class="panel-title">Rspamd UI</h3>
       </div>
@@ -158,18 +302,18 @@ $tfa_data = get_tfa();
             <div class="form-group">
               <label class="control-label col-sm-3" for="rspamd_ui_pass"><?=$lang['admin']['password'];?>:</label>
               <div class="col-sm-9">
-              <input type="password" class="form-control" name="rspamd_ui_pass" required>
+              <input type="password" class="form-control" name="rspamd_ui_pass" autocomplete="new-password" required>
               </div>
             </div>
             <div class="form-group">
               <label class="control-label col-sm-3" for="rspamd_ui_pass2"><?=$lang['admin']['password_repeat'];?>:</label>
               <div class="col-sm-9">
-              <input type="password" class="form-control" name="rspamd_ui_pass2" required>
+              <input type="password" class="form-control" name="rspamd_ui_pass2" autocomplete="new-password" required>
               </div>
             </div>
             <div class="form-group">
               <div class="col-sm-offset-3 col-sm-9">
-                <button type="submit" class="btn btn-default" id="rspamd_ui" name="rspamd_ui" href="#"><span class="glyphicon glyphicon-check"></span> <?=$lang['admin']['save'];?></button>
+                <button type="submit" class="btn btn-sm btn-success" id="rspamd_ui" name="rspamd_ui" href="#"><span class="glyphicon glyphicon-check"></span> <?=$lang['admin']['save'];?></button>
               </div>
             </div>
           </form>
@@ -209,7 +353,7 @@ $tfa_data = get_tfa();
             <form class="form" data-id="rlyhost" role="form" method="post">
               <div class="form-group">
                 <label for="hostname"><?=$lang['admin']['host'];?></label>
-                <input class="form-control input-sm" name="hostname" placeholder='host:25, host, [host]:25, [0.0.0.0]:25' required>
+                <input class="form-control input-sm" name="hostname" placeholder='[0.0.0.0], [0.0.0.0]:25, host:25, host, [host]:25' required>
               </div>
               <div class="form-group">
                 <label for="username"><?=$lang['admin']['username'];?></label>
@@ -252,7 +396,7 @@ $tfa_data = get_tfa();
             <form class="form" data-id="transport" role="form" method="post">
               <div class="form-group">
                 <label for="destination"><?=$lang['admin']['destination'];?></label>
-                <input class="form-control input-sm" name="destination" placeholder='example.org, .example.org, *, box@example.org' required>
+                <input class="form-control input-sm" name="destination" placeholder='<?=$lang['admin']['transport_dest_format'];?>' required>
               </div>
               <div class="form-group">
                 <label for="nexthop"><?=$lang['admin']['nexthop'];?></label>
@@ -264,7 +408,17 @@ $tfa_data = get_tfa();
               </div>
               <div class="form-group">
                 <label for="password"><?=$lang['admin']['password'];?></label>
-                <input class="form-control" name="password">
+                <input class="form-control input-sm" name="password">
+              </div>
+              <!-- <div class="form-group">
+                <label>
+                  <input type="checkbox" name="lookup_mx" value="1"> <?=$lang['admin']['lookup_mx'];?>
+                </label>
+              </div> -->
+              <div class="form-group">
+                <label>
+                  <input type="checkbox" name="active" value="1"> <?=$lang['admin']['active'];?>
+                </label>
               </div>
               <p class="help-block"><?=$lang['admin']['credentials_transport_warning'];?></p>
               <button class="btn btn-default" data-action="add_item" data-id="transport" data-api-url='add/transport' data-api-attr='{}' href="#"><span class="glyphicon glyphicon-plus"></span> <?=$lang['admin']['add'];?></button>
@@ -275,22 +429,7 @@ $tfa_data = get_tfa();
     </div>
   </div>
 
-  <div role="tabpanel" class="tab-pane" id="tab-config">
-    <div class="row">
-    <div id="sidebar-admin" class="col-sm-2 hidden-xs">
-      <div id="scrollbox" class="list-group">
-        <a href="#dkim" class="list-group-item"><?=$lang['admin']['dkim_keys'];?></a>
-        <a href="#fwdhosts" class="list-group-item"><?=$lang['admin']['forwarding_hosts'];?></a>
-        <a href="#f2bparams" class="list-group-item"><?=$lang['admin']['f2b_parameters'];?></a>
-        <a href="#quarantine" class="list-group-item"><?=$lang['admin']['quarantine'];?></a>
-        <a href="#quota" class="list-group-item"><?=$lang['admin']['quota_notifications'];?></a>
-        <a href="#rsettings" class="list-group-item"><?=$lang['admin']['rspamd_settings_map'];?></a>
-        <a href="#customize" class="list-group-item"><?=$lang['admin']['customize'];?></a>
-        <a href="#top" class="list-group-item" style="border-top:1px dashed #dadada">↸ <?=$lang['admin']['to_top'];?></a>
-      </div>
-    </div>
-    <div class="col-sm-10">
-    <span class="anchor" id="dkim"></span>
+  <div role="tabpanel" class="tab-pane" id="tab-config-dkim">
     <div class="panel panel-default">
       <div class="panel-heading"><?=$lang['admin']['dkim_keys'];?></div>
       <div class="panel-body">
@@ -326,7 +465,7 @@ $tfa_data = get_tfa();
           else {
           ?>
           <div class="row">
-              <div class="col-md-1"><input class="dkim_missing" type="checkbox" data-id="dkim" name="multi_select" value="<?=$domain;?>" disabled /></div>
+            <div class="col-md-1"><input class="dkim_missing" type="checkbox" data-id="dkim" name="multi_select" value="<?=$domain;?>" disabled /></div>
             <div class="col-md-3">
               <p><?=$lang['admin']['domain'];?>: <strong><?=htmlspecialchars($domain);?></strong><br /><span class="label label-danger"><?=$lang['admin']['dkim_key_missing'];?></span></p>
             </div>
@@ -416,7 +555,7 @@ $tfa_data = get_tfa();
           <button class="btn btn-sm btn-default" data-action="add_item" data-id="dkim" data-api-url='add/dkim' data-api-attr='{}' href="#"><span class="glyphicon glyphicon-plus"></span> <?=$lang['admin']['add'];?></button>
         </form>
 
-        <legend data-target="#import_dkim" style="margin-top:40px;cursor:pointer" class="arrow-toggle"" unselectable="on" data-toggle="collapse">
+        <legend data-target="#import_dkim" style="margin-top:40px;cursor:pointer" class="arrow-toggle" unselectable="on" data-toggle="collapse">
           <span style="font-size:12px" class="arrow rotate glyphicon glyphicon-menu-down"></span> <?=$lang['admin']['import_private_key'];?>
         </legend>
         <div id="import_dkim" class="collapse">
@@ -441,52 +580,52 @@ $tfa_data = get_tfa();
           <span style="font-size:12px" class="arrow rotate glyphicon glyphicon-menu-down"></span> <?=$lang['admin']['duplicate_dkim'];?>
         </legend>
         <div id="duplicate_dkim" class="collapse">
-        <form class="form-horizontal" data-id="dkim_duplicate" role="form" method="post">
-          <div class="form-group">
-            <label class="control-label col-sm-2" for="from_domain"><?=$lang['admin']['dkim_from'];?>:</label>
-            <div class="col-sm-10">
-            <select data-style="btn btn-default btn-sm"
-              data-live-search="true"
-              data-id="dkim_duplicate"
-              title="<?=$lang['admin']['dkim_from_title'];?>"
-              name="from_domain" id="from_domain" class="full-width-select form-control" required>
-              <?php
-              foreach ($dkim_domains as $dkim) {
-              ?>
-              <option value="<?=$dkim;?>"><?=$dkim;?></option>
-              <?php
-              }
-              ?>
-            </select>
+          <form class="form-horizontal" data-id="dkim_duplicate" role="form" method="post">
+            <div class="form-group">
+              <label class="control-label col-sm-2" for="from_domain"><?=$lang['admin']['dkim_from'];?>:</label>
+              <div class="col-sm-10">
+              <select data-style="btn btn-default btn-sm"
+                data-live-search="true"
+                data-id="dkim_duplicate"
+                title="<?=$lang['admin']['dkim_from_title'];?>"
+                name="from_domain" id="from_domain" class="full-width-select form-control" required>
+                <?php
+                foreach ($dkim_domains as $dkim) {
+                ?>
+                <option value="<?=$dkim;?>"><?=$dkim;?></option>
+                <?php
+                }
+                ?>
+              </select>
+              </div>
             </div>
-          </div>
-          <div class="form-group">
-            <label class="control-label col-sm-2" for="to_domain"><?=$lang['admin']['dkim_to'];?>:</label>
-            <div class="col-sm-10">
-            <select
-              data-live-search="true"
-              data-style="btn btn-default btn-sm"
-              data-id="dkim_duplicate"
-              title="<?=$lang['admin']['dkim_to_title'];?>"
-              name="to_domain" id="to_domain" class="full-width-select form-control" multiple required>
-              <?php
-              foreach (array_merge(mailbox('get', 'domains'), mailbox('get', 'alias_domains')) as $domain) {
-              ?>
-              <option value="<?=$domain;?>"><?=$domain;?></option>
-              <?php
-              }
-              ?>
-            </select>
+            <div class="form-group">
+              <label class="control-label col-sm-2" for="to_domain"><?=$lang['admin']['dkim_to'];?>:</label>
+              <div class="col-sm-10">
+              <select
+                data-live-search="true"
+                data-style="btn btn-default btn-sm"
+                data-id="dkim_duplicate"
+                title="<?=$lang['admin']['dkim_to_title'];?>"
+                name="to_domain" id="to_domain" class="full-width-select form-control" multiple required>
+                <?php
+                foreach (array_merge(mailbox('get', 'domains'), mailbox('get', 'alias_domains')) as $domain) {
+                ?>
+                <option value="<?=$domain;?>"><?=$domain;?></option>
+                <?php
+                }
+                ?>
+              </select>
+              </div>
             </div>
-          </div>
-          <button class="btn btn-sm btn-default" data-action="add_item" data-id="dkim_duplicate" data-api-url='add/dkim_duplicate' data-api-attr='{}' href="#"><span class="glyphicon glyphicon-duplicate"></span> <?=$lang['admin']['duplicate'];?></button>
-        </form>
+            <button class="btn btn-sm btn-default" data-action="add_item" data-id="dkim_duplicate" data-api-url='add/dkim_duplicate' data-api-attr='{}' href="#"><span class="glyphicon glyphicon-duplicate"></span> <?=$lang['admin']['duplicate'];?></button>
+          </form>
         </div>
-
       </div>
     </div>
+  </div>
 
-    <span class="anchor" id="fwdhosts"></span>
+  <div role="tabpanel" class="tab-pane" id="tab-config-fwdhosts">
     <div class="panel panel-default">
       <div class="panel-heading"><?=$lang['admin']['forwarding_hosts'];?></div>
       <div class="panel-body">
@@ -523,8 +662,9 @@ $tfa_data = get_tfa();
         </form>
       </div>
     </div>
+  </div>
 
-    <span class="anchor" id="f2bparams"></span>
+  <div role="tabpanel" class="tab-pane" id="tab-config-f2b">
     <div class="panel panel-default">
       <div class="panel-heading"><?=$lang['admin']['f2b_parameters'];?></div>
       <div class="panel-body">
@@ -568,7 +708,7 @@ $tfa_data = get_tfa();
             <textarea class="form-control" name="blacklist" rows="5"><?=$f2b_data['blacklist'];?></textarea>
           </div>
           <div class="btn-group">
-            <button class="btn btn-default" data-action="edit_selected" data-item="self" data-id="f2b" data-api-url='edit/fail2ban' data-api-attr='{}' href="#"><span class="glyphicon glyphicon-check"></span> <?=$lang['admin']['save'];?></button>
+            <button class="btn btn-success" data-action="edit_selected" data-item="self" data-id="f2b" data-api-url='edit/fail2ban' data-api-attr='{}' href="#"><span class="glyphicon glyphicon-check"></span> <?=$lang['admin']['save'];?></button>
             <a href="#" role="button" class="btn btn-default" data-toggle="modal" data-container="netfilter-mailcow" data-target="#RestartContainer"><span class="glyphicon glyphicon-refresh"></span> <?= $lang['header']['restart_netfilter']; ?></a>
           </div>
         </form>
@@ -583,13 +723,13 @@ $tfa_data = get_tfa();
         if (!empty($f2b_data['active_bans'])):
           foreach ($f2b_data['active_bans'] as $active_bans):
           ?>
-          <p><span class="label label-info" style="padding:4px;font-size:85%;"><span class="glyphicon glyphicon-filter"></span> <?=$active_bans['network'];?> (<?=$active_bans['banned_until'];?>) - 
+          <p><span class="label label-info" style="padding:4px;font-size:85%;"><span class="glyphicon glyphicon-filter"></span> <?=$active_bans['network'];?> (<?=$active_bans['banned_until'];?>) -
             <?php
             if ($active_bans['queued_for_unban'] == 0):
             ?>
             <a data-action="edit_selected" data-item="<?=$active_bans['network'];?>" data-id="f2b-quick" data-api-url='edit/fail2ban' data-api-attr='{"action":"unban"}' href="#">[<?=$lang['admin']['queue_unban'];?>]</a>
             <a data-action="edit_selected" data-item="<?=$active_bans['network'];?>" data-id="f2b-quick" data-api-url='edit/fail2ban' data-api-attr='{"action":"whitelist"}' href="#">[whitelist]</a>
-            <a data-action="edit_selected" data-item="<?=$active_bans['network'];?>" data-id="f2b-quick" data-api-url='edit/fail2ban' data-api-attr='{"action":"blacklist"}' href="#">[blacklist]</a>
+            <a data-action="edit_selected" data-item="<?=$active_bans['network'];?>" data-id="f2b-quick" data-api-url='edit/fail2ban' data-api-attr='{"action":"blacklist"}' href="#">[blacklist (<b>needs restart</b>)]</a>
             <?php
             else:
             ?>
@@ -600,95 +740,116 @@ $tfa_data = get_tfa();
           </span></p>
           <?php
           endforeach;
+          ?>
+          <hr>
+          <?php
         endif;
         if (!empty($f2b_data['perm_bans'])):
           foreach ($f2b_data['perm_bans'] as $perm_bans):
           ?>
-          <p>
-          <span class="label label-danger" style="padding:4px;font-size:85%;"><span class="glyphicon glyphicon-filter"></span> <?=$perm_bans?></span>
-          </p>
+          <span class="label label-danger" style="padding: 0.1em 0.4em 0.1em;"><span class="glyphicon glyphicon-filter"></span> <?=$perm_bans?></span>
           <?php
           endforeach;
         endif;
         ?>
       </div>
     </div>
+  </div>
 
-    <span class="anchor" id="quarantine"></span>
+  <div role="tabpanel" class="tab-pane" id="tab-config-quarantine">
     <div class="panel panel-default">
       <div class="panel-heading"><?=$lang['admin']['quarantine'];?></div>
       <div class="panel-body">
-       <?php $q_data = quarantine('settings');?>
-        <form class="form" data-id="quarantine" role="form" method="post">
-          <div class="row">
-            <div class="col-sm-6">
-              <div class="form-group">
-                <label for="retention_size"><?=$lang['admin']['quarantine_retention_size'];?></label>
-                <input type="number" class="form-control" name="retention_size" value="<?=$q_data['retention_size'];?>" placeholder="0" required>
-              </div>
-            </div>
-            <div class="col-sm-6">
-              <div class="form-group">
-                <label for="max_size"><?=$lang['admin']['quarantine_max_size'];?></label>
-                <input type="number" class="form-control" name="max_size" value="<?=$q_data['max_size'];?>" placeholder="0" required>
-              </div>
+        <?php $q_data = quarantine('settings');
+        if (empty($q_data['retention_size']) || empty($q_data['max_size'])):
+        ?>
+        <div class="panel-body"><div class="alert alert-info"><?=$lang['quarantine']['disabled_by_config'];?></div></div>
+        <?php
+        endif;
+        ?>
+        <form class="form-horizontal" data-id="quarantine" role="form" method="post">
+          <div class="form-group">
+            <label class="col-sm-4 control-label" for="retention_size"><?=$lang['admin']['quarantine_retention_size'];?></label>
+            <div class="col-sm-8">
+              <input type="number" class="form-control" name="retention_size" value="<?=$q_data['retention_size'];?>" placeholder="0" required>
             </div>
           </div>
-          <div class="row">
-            <div class="col-sm-6">
-              <div class="form-group">
-                <label for="sender"><?=$lang['admin']['quarantine_notification_sender'];?>:</label>
-                <input type="text" class="form-control" name="sender" value="<?=$q_data['sender'];?>" placeholder="quarantine@localhost">
-              </div>
-            </div>
-            <div class="col-sm-6">
-              <div class="form-group">
-                <label for="subject"><?=$lang['admin']['quarantine_notification_subject'];?>:</label>
-                <input type="text" class="form-control" name="subject" value="<?=$q_data['subject'];?>" placeholder="Spam Quarantine Notification">
-              </div>
+          <div class="form-group">
+            <label class="col-sm-4 control-label" for="max_size"><?=$lang['admin']['quarantine_max_size'];?></label>
+            <div class="col-sm-8">
+              <input type="number" class="form-control" name="max_size" value="<?=$q_data['max_size'];?>" placeholder="0" required>
             </div>
           </div>
-          <div class="row">
-            <div class="col-sm-12">
-              <legend data-target="#quarantine_template" style="cursor:pointer" class="arrow-toggle" unselectable="on" data-toggle="collapse">
-                <span style="font-size:12px" class="arrow rotate glyphicon glyphicon-menu-down"></span> <?=$lang['admin']['quarantine_notification_html'];?>
-              </legend>
-              <div id="quarantine_template" class="collapse" >
-                <textarea autocorrect="off" spellcheck="false" autocapitalize="none" class="form-control textarea-code" rows="20" name="html_tmpl"><?=$q_data['html_tmpl'];?></textarea>
-              </div>
+          <div class="form-group">
+            <label class="col-sm-4 control-label" for="max_age"><?=$lang['admin']['quarantine_max_age'];?></label>
+            <div class="col-sm-8">
+              <input type="number" class="form-control" name="max_age" value="<?=$q_data['max_age'];?>" min="1" required>
             </div>
           </div>
-          <div class="row">
-            <div class="col-sm-6">
-              <div class="form-group">
-                <label for="release_format"><?=$lang['admin']['quarantine_release_format'];?>:</label>
-                <select data-width="100%" name="release_format" class="selectpicker" title="<?=$lang['tfa']['select'];?>">
-                  <option <?=($q_data['release_format'] == 'raw') ? 'selected' : null;?> value="raw"><?=$lang['admin']['quarantine_release_format_raw'];?></option>
-                  <option <?=($q_data['release_format'] == 'attachment') ? 'selected' : null;?> value="attachment"><?=$lang['admin']['quarantine_release_format_att'];?></option>
-                </select>
-              </div>
-            </div>
-            <div class="col-sm-6">
-              <div class="form-group">
-                <label for="exclude_domains"><?=$lang['admin']['quarantine_exclude_domains'];?>:</label><br />
-                <select data-width="100%" name="exclude_domains" class="selectpicker" title="<?=$lang['tfa']['select'];?>" multiple>
-                <?php
-                foreach (array_merge(mailbox('get', 'domains'), mailbox('get', 'alias_domains')) as $domain):
-                ?>
-                  <option <?=(in_array($domain, $q_data['exclude_domains'])) ? 'selected' : null;?>><?=htmlspecialchars($domain);?></option>
-                <?php
-                endforeach;
-                ?>
-                </select>
-              </div>
+          <hr>
+          <div class="form-group">
+            <label class="col-sm-4 control-label" for="sender"><span class="glyphicon glyphicon-share-alt"></span> <?=$lang['admin']['quarantine_redirect'];?></label>
+            <div class="col-sm-8">
+              <input type="email" class="form-control" name="redirect" value="<?=htmlspecialchars($q_data['redirect']);?>" placeholder="">
             </div>
           </div>
-          <button class="btn btn-default" data-action="edit_selected" data-item="self" data-id="quarantine" data-api-url='edit/quarantine' data-api-attr='{"action":"settings"}' href="#"><span class="glyphicon glyphicon-check"></span> <?=$lang['admin']['save'];?></button>
+          <div class="form-group">
+            <label class="col-sm-4 control-label" for="sender"><span class="glyphicon glyphicon-copy"></span> <?=$lang['admin']['quarantine_bcc'];?></label>
+            <div class="col-sm-8">
+              <input type="email" class="form-control" name="bcc" value="<?=htmlspecialchars($q_data['bcc']);?>" placeholder="">
+            </div>
+          </div>
+          <hr>
+          <div class="form-group">
+            <label class="col-sm-4 control-label" for="sender"><?=$lang['admin']['quarantine_notification_sender'];?>:</label>
+            <div class="col-sm-8">
+              <input type="email" class="form-control" name="sender" value="<?=htmlspecialchars($q_data['sender']);?>" placeholder="quarantine@localhost">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="col-sm-4 control-label" for="subject"><?=$lang['admin']['quarantine_notification_subject'];?>:</label>
+            <div class="col-sm-8">
+              <input type="text" class="form-control" name="subject" value="<?=htmlspecialchars($q_data['subject']);?>" placeholder="Spam Quarantine Notification">
+            </div>
+          </div>
+          <hr>
+          <div class="form-group">
+            <label class="col-sm-4 control-label" for="release_format"><?=$lang['admin']['quarantine_release_format'];?>:</label>
+            <div class="col-sm-8">
+              <select data-width="100%" name="release_format" class="selectpicker" title="<?=$lang['tfa']['select'];?>">
+                <option <?=($q_data['release_format'] == 'raw') ? 'selected' : null;?> value="raw"><?=$lang['admin']['quarantine_release_format_raw'];?></option>
+                <option <?=($q_data['release_format'] == 'attachment') ? 'selected' : null;?> value="attachment"><?=$lang['admin']['quarantine_release_format_att'];?></option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="col-sm-4 control-label" for="exclude_domains"><?=$lang['admin']['quarantine_exclude_domains'];?>:</label><br />
+            <div class="col-sm-8">
+              <select data-width="100%" name="exclude_domains" class="selectpicker" title="<?=$lang['tfa']['select'];?>" multiple>
+              <?php
+              foreach (array_merge(mailbox('get', 'domains'), mailbox('get', 'alias_domains')) as $domain):
+              ?>
+                <option <?=(in_array($domain, $q_data['exclude_domains'])) ? 'selected' : null;?>><?=htmlspecialchars($domain);?></option>
+              <?php
+              endforeach;
+              ?>
+              </select>
+            </div>
+          </div>
+          <hr>
+          <legend data-target="#quarantine_template" style="cursor:pointer" class="arrow-toggle" unselectable="on" data-toggle="collapse">
+            <span style="font-size:12px" class="arrow rotate glyphicon glyphicon-menu-down"></span> <?=$lang['admin']['quarantine_notification_html'];?>
+          </legend>
+          <div id="quarantine_template" class="collapse" >
+            <textarea autocorrect="off" spellcheck="false" autocapitalize="none" class="form-control textarea-code" rows="40" name="html_tmpl"><?=$q_data['html_tmpl'];?></textarea>
+          </div>
+          <button class="btn btn-sm btn-success" data-action="edit_selected" data-item="self" data-id="quarantine" data-api-url='edit/quarantine' data-api-attr='{"action":"settings"}' href="#"><span class="glyphicon glyphicon-check"></span> <?=$lang['admin']['save'];?></button>
         </form>
       </div>
     </div>
+  </div>
 
-    <span class="anchor" id="quota"></span>
+  <div role="tabpanel" class="tab-pane" id="tab-config-quota">
     <div class="panel panel-default">
       <div class="panel-heading"><?=$lang['admin']['quota_notifications'];?></div>
       <div class="panel-body">
@@ -699,13 +860,13 @@ $tfa_data = get_tfa();
           <div class="col-sm-6">
             <div class="form-group">
               <label for="sender"><?=$lang['admin']['quarantine_notification_sender'];?>:</label>
-              <input type="text" class="form-control" name="sender" value="<?=$qw_data['sender'];?>" placeholder="quota-warning@localhost">
+              <input type="email" class="form-control" name="sender" value="<?=htmlspecialchars($qw_data['sender']);?>" placeholder="quota-warning@localhost">
             </div>
           </div>
           <div class="col-sm-6">
             <div class="form-group">
               <label for="subject"><?=$lang['admin']['quarantine_notification_subject'];?>:</label>
-              <input type="text" class="form-control" name="subject" value="<?=$qw_data['subject'];?>" placeholder="Quota warning">
+              <input type="text" class="form-control" name="subject" value="<?=htmlspecialchars($qw_data['subject']);?>" placeholder="Quota warning">
             </div>
           </div>
         </div>
@@ -728,15 +889,16 @@ $tfa_data = get_tfa();
                 data-item="quota_notification"
                 data-id="quota_notification"
                 data-api-url='edit/quota_notification'
-                data-api-attr='{}'><?=$lang['user']['save_changes'];?></a>
+                data-api-attr='{}'><span class="glyphicon glyphicon-check"></span> <?=$lang['user']['save_changes'];?></a>
             </div>
           </div>
         </div>
       </form>
       </div>
     </div>
+  </div>
 
-    <span class="anchor" id="rsettings"></span>
+  <div role="tabpanel" class="tab-pane" id="tab-config-rsettings">
     <div class="panel panel-default">
       <div class="panel-heading"><?=$lang['admin']['rspamd_settings_map'];?></div>
       <div class="panel-body">
@@ -797,19 +959,19 @@ $tfa_data = get_tfa();
                     <input type="hidden" name="active" value="0">
                     <div class="form-group">
                       <label for="desc"><?=$lang['admin']['rsetting_desc'];?>:</label>
-                      <input type="text" class="form-control" name="desc" value="<?=$rsetting_details['desc'];?>">
+                      <input type="text" class="form-control" name="desc" value="<?=htmlspecialchars($rsetting_details['desc']);?>">
                     </div>
                     <div class="form-group">
                       <label for="content"><?=$lang['admin']['rsetting_content'];?>:</label>
-                      <textarea class="form-control" name="content" rows="10"><?=$rsetting_details['content'];?></textarea>
+                      <textarea class="form-control" name="content" rows="10"><?=htmlspecialchars($rsetting_details['content']);?></textarea>
                     </div>
                     <div class="form-group">
                       <label>
                         <input type="checkbox" name="active" value="1" <?=($rsetting_details['active_int'] == 1) ? 'checked' : null;?>> <?=$lang['admin']['active'];?>
                       </label>
                     </div>
-                    <button class="btn btn-default" data-action="edit_selected" data-item="<?=$rsetting_details['id'];?>" data-id="rsettings" data-api-url='edit/rsetting' data-api-attr='{}' href="#"><span class="glyphicon glyphicon-check"></span> <?=$lang['admin']['save'];?></button>
-                    <button class="btn btn-danger" data-action="delete_selected" data-item="<?=$rsetting_details['id'];?>" data-id="rsettings" data-api-url="delete/rsetting" data-api-attr='{}' href="#"><?=$lang['admin']['remove'];?></button>
+                    <button class="btn btn-sm btn-success" data-action="edit_selected" data-item="<?=$rsetting_details['id'];?>" data-id="rsettings" data-api-url='edit/rsetting' data-api-attr='{}' href="#"><span class="glyphicon glyphicon-check"></span> <?=$lang['admin']['save'];?></button>
+                    <button class="btn btn-sm btn-danger" data-action="delete_selected" data-item="<?=$rsetting_details['id'];?>" data-id="rsettings" data-api-url="delete/rsetting" data-api-attr='{}' href="#"><?=$lang['admin']['remove'];?></button>
                   </form>
                 </div>
                 <?php
@@ -822,8 +984,9 @@ $tfa_data = get_tfa();
         </form>
       </div>
     </div>
+  </div>
 
-    <span class="anchor" id="customize"></span>
+  <div role="tabpanel" class="tab-pane" id="tab-config-customize">
     <div class="panel panel-default">
       <div class="panel-heading"><?=$lang['admin']['customize'];?></div>
       <div class="panel-body">
@@ -836,7 +999,7 @@ $tfa_data = get_tfa();
           </p>
         </form>
         <?php
-        if ($main_logo = customize('get', 'main_logo')):
+        if ($main_logo = customize('get', 'main_logo')) {
           $specs = customize('get', 'main_logo_specs');
         ?>
         <div class="row">
@@ -855,9 +1018,7 @@ $tfa_data = get_tfa();
             </form>
           </div>
         </div>
-        <?php
-        endif;
-        ?>
+        <?php } ?>
         <legend><?=$lang['admin']['app_links'];?></legend>
         <p class="help-block"><?=$lang['admin']['merged_vars_hint'];?></p>
         <form class="form-inline" data-id="app_links" role="form" method="post">
@@ -870,39 +1031,33 @@ $tfa_data = get_tfa();
             <?php
             $app_links = customize('get', 'app_links');
             foreach ($app_links as $row) {
-              foreach ($row as $key => $val):
+              foreach ($row as $key => $val) {
             ?>
             <tr>
               <td><input class="input-sm form-control" data-id="app_links" type="text" name="app" required value="<?=$key;?>"></td>
               <td><input class="input-sm form-control" data-id="app_links" type="text" name="href" required value="<?=$val;?>"></td>
               <td><a href="#" role="button" class="btn btn-xs btn-default" type="button"><?=$lang['admin']['remove_row'];?></a></td>
             </tr>
-            <?php 
-              endforeach;
+            <?php
+              }
             }
-            foreach ($MAILCOW_APPS as $app):
+            foreach ($MAILCOW_APPS as $app) {
             ?>
             <tr>
               <td><input class="input-sm form-control" value="<?=htmlspecialchars($app['name']);?>" disabled></td>
               <td><input class="input-sm form-control" value="<?=htmlspecialchars($app['link']);?>" disabled></td>
               <td>&nbsp;</td>
             </tr>
-            <?php
-            endforeach;
-            ?>
+            <?php } ?>
           </table>
           <p><div class="btn-group">
-            <button class="btn btn-sm btn-default" data-action="edit_selected" data-item="admin" data-id="app_links" data-reload="no" data-api-url='edit/app_links' data-api-attr='{}' href="#"><span class="glyphicon glyphicon-check"></span> <?=$lang['admin']['save'];?></button>
+            <button class="btn btn-sm btn-success" data-action="edit_selected" data-item="admin" data-id="app_links" data-reload="no" data-api-url='edit/app_links' data-api-attr='{}' href="#"><span class="glyphicon glyphicon-check"></span> <?=$lang['admin']['save'];?></button>
             <button class="btn btn-sm btn-default" type="button" id="add_app_link_row"><?=$lang['admin']['add_row'];?></button>
           </div></p>
         </form>
-        <legend data-target="#ui_texts" style="cursor:pointer" class="arrow-toggle" unselectable="on" data-toggle="collapse">
-          <span style="font-size:12px" class="arrow rotate glyphicon glyphicon-menu-down"></span> <?=$lang['admin']['ui_texts'];?>
-        </legend>
-        <div id="ui_texts" class="collapse" >
-        <?php
-        $ui_texts = customize('get', 'ui_texts');
-        ?>
+        <legend data-target="#ui_texts" style="padding-top:20px" unselectable="on"><?=$lang['admin']['ui_texts'];?></legend>
+        <div id="ui_texts">
+        <?php $ui_texts = customize('get', 'ui_texts'); ?>
           <form class="form" data-id="uitexts" role="form" method="post">
             <div class="form-group">
               <label for="title_name"><?=$lang['admin']['title_name'];?>:</label>
@@ -920,13 +1075,28 @@ $tfa_data = get_tfa();
               <label for="help_text"><?=$lang['admin']['help_text'];?>:</label>
               <textarea class="form-control" id="help_text" name="help_text" rows="7"><?=$ui_texts['help_text'];?></textarea>
             </div>
-            <button class="btn btn-default" data-action="edit_selected" data-item="ui" data-id="uitexts" data-api-url='edit/ui_texts' data-api-attr='{}' href="#"><span class="glyphicon glyphicon-check"></span> <?=$lang['admin']['save'];?></button>
+            <hr>
+            <div class="form-group">
+              <p class="help-block"><?=$lang['admin']['ui_header_announcement_help'];?></p>
+              <label for="ui_announcement_type"><?=$lang['admin']['ui_header_announcement'];?>:</label>
+              <p><select multiple data-width="100%" name="ui_announcement_type" class="selectpicker show-tick" data-max-options="1" title="<?=$lang['admin']['ui_header_announcement_select'];?>">
+                <option <?=($ui_texts['ui_announcement_type'] == 'info') ? 'selected' : null;?> value="info"><?=$lang['admin']['ui_header_announcement_type_info'];?></option>
+                <option <?=($ui_texts['ui_announcement_type'] == 'warning') ? 'selected' : null;?> value="warning"><?=$lang['admin']['ui_header_announcement_type_warning'];?></option>
+                <option <?=($ui_texts['ui_announcement_type'] == 'danger') ? 'selected' : null;?> value="danger"><?=$lang['admin']['ui_header_announcement_type_danger'];?></option>
+              </select></p>
+              <p><textarea class="form-control" id="ui_announcement_text" name="ui_announcement_text" rows="7"><?=$ui_texts['ui_announcement_text'];?></textarea></p>
+              <p><input type="checkbox" name="ui_announcement_active" <?=($ui_texts['ui_announcement_active'] == 1) ? 'checked' : null;?>> <?=$lang['admin']['ui_header_announcement_active'];?></p>
+            </div>
+            <hr>
+            <div class="form-group">
+              <label for="ui_footer"><?=$lang['admin']['ui_footer'];?>:</label>
+              <textarea class="form-control" id="ui_footer" name="ui_footer" rows="7"><?=$ui_texts['ui_footer'];?></textarea>
+            </div>
+            <button class="btn btn-sm btn-success" data-action="edit_selected" data-item="ui" data-id="uitexts" data-api-url='edit/ui_texts' data-api-attr='{}' href="#"><span class="glyphicon glyphicon-check"></span> <?=$lang['admin']['save'];?></button>
           </form>
         </div>
       </div>
     </div>
-  </div>
-  </div>
   </div>
 
   <div role="tabpanel" class="tab-pane" id="tab-sys-mails">
@@ -965,11 +1135,11 @@ $tfa_data = get_tfa();
               <select id="mass_exclude" name="mass_exclude[]" data-live-search="true" data-width="100%"  size="30" multiple>
               <?php
               if (!empty($mailboxes)) {
-                foreach (array_filter($mailboxes) as $mailbox):
+                foreach (array_filter($mailboxes) as $mailbox) {
                 ?>
                 <option><?=htmlspecialchars($mailbox);?></option>
                 <?php
-                endforeach;
+                }
               }
               ?>
               </select>
@@ -979,11 +1149,11 @@ $tfa_data = get_tfa();
               <select id="mass_include" name="mass_include[]" data-live-search="true" data-width="100%"  size="30" multiple>
               <?php
               if (!empty($mailboxes)) {
-                foreach (array_filter($mailboxes) as $mailbox):
+                foreach (array_filter($mailboxes) as $mailbox) {
                 ?>
                 <option><?=htmlspecialchars($mailbox);?></option>
                 <?php
-                endforeach;
+                }
               }
               ?>
               </select>
@@ -1056,6 +1226,63 @@ $tfa_data = get_tfa();
     </div>
   </div>
 
+  <div role="tabpanel" class="tab-pane" id="tab-globalfilter-regex">
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <?=$lang['admin']['rspamd_global_filters'];?>
+      </div>
+      <div class="panel-body">
+        <p><?=$lang['admin']['rspamd_global_filters_info'];?></p>
+        <div id="confirm_show_rspamd_global_filters" class="<?=($_SESSION['show_rspamd_global_filters'] === true) ? 'hidden' : '';?>">
+          <div class="form-group">
+            <div class="col-sm-offset-2 col-sm-10">
+              <label>
+                <input type="checkbox" id="show_rspamd_global_filters"> <?=$lang['admin']['rspamd_global_filters_agree'];?>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div id="rspamd_global_filters" class="<?=($_SESSION['show_rspamd_global_filters'] !== true) ? 'hidden' : '';?>">
+        <hr>
+        <span class="anchor" id="regexmaps"></span>
+        <h4><?=$lang['admin']['regex_maps'];?></h4>
+        <p><?=$lang['admin']['rspamd_global_filters_regex'];?></p>
+        <ul>
+        <?php
+        foreach ($RSPAMD_MAPS['regex'] as $rspamd_regex_desc => $rspamd_regex_map):
+        ?>
+        <li><a href="#<?=$rspamd_regex_map;?>"><?=$rspamd_regex_desc;?></a> (<small><?=$rspamd_regex_map;?></small>)</li>
+        <?php
+        endforeach;
+        ?>
+        </ul>
+        <?php
+        foreach ($RSPAMD_MAPS['regex'] as $rspamd_regex_desc => $rspamd_regex_map):
+        ?>
+        <hr>
+        <span class="anchor" id="<?=$rspamd_regex_map;?>"></span>
+        <form class="form-horizontal" data-id="<?=$rspamd_regex_map;?>" role="form" method="post">
+          <div class="form-group">
+            <label class="control-label col-sm-3" for="<?=$rspamd_regex_map;?>"><?=$rspamd_regex_desc;?><br><small><?=$rspamd_regex_map;?></small></label>
+            <div class="col-sm-9">
+              <textarea id="<?=$rspamd_regex_map;?>" spellcheck="false" autocorrect="off" autocapitalize="none" class="form-control textarea-code" rows="10" name="rspamd_map_data" required><?=file_get_contents('/rspamd_custom_maps/' . $rspamd_regex_map);?></textarea>
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="col-sm-offset-3 col-sm-9">
+              <button class="btn btn-xs btn-default validate_rspamd_regex" data-regex-map="<?=$rspamd_regex_map;?>" href="#"><?=$lang['add']['validate'];?></button>
+              <button class="btn btn-xs btn-success submit_rspamd_regex" data-action="edit_selected" data-id="<?=$rspamd_regex_map;?>" data-item="<?=htmlspecialchars($rspamd_regex_map);?>" data-api-url='edit/rspamd-map' data-api-attr='{}' href="#" disabled><?=$lang['edit']['save'];?></button>
+            </div>
+          </div>
+        </form>
+        <?php
+        endforeach;
+        ?>
+        </div>
+      </div>
+    </div>
+  </div>
+
   </div> <!-- /tab-content -->
   </div> <!-- /col-md-12 -->
   </div> <!-- /row -->
@@ -1075,6 +1302,8 @@ echo "var log_pagination_size = '". $LOG_PAGINATION_SIZE . "';\n";
 </script>
 <?php
 $js_minifier->add('/web/js/site/admin.js');
+$js_minifier->add('/web/js/presets/rspamd.js');
+$js_minifier->add('/web/js/site/pwgen.js');
 require_once $_SERVER['DOCUMENT_ROOT'] . '/inc/footer.inc.php';
 } else {
 	header('Location: /');
