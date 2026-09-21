@@ -1,68 +1,24 @@
 <?php
 session_start();
 require_once $_SERVER['DOCUMENT_ROOT'] . '/inc/prerequisites.inc.php';
+if (quarantine('hash_details', $_GET['hash']) === false && !isset($_POST)) {
+  header('Location: /admin');
+  exit();
+}
 require_once $_SERVER['DOCUMENT_ROOT'] . '/inc/header.inc.php';
-if (preg_match("/^([a-f0-9]{64})$/", $_POST['quick_release']) || preg_match("/^([a-f0-9]{64})$/", $_POST['quick_delete'])) {
-?>
-<div class="container">
-  <div class="row">
-    <div class="col-md-offset-2 col-md-8">
-      <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span> <?= $lang['header']['quarantine']; ?></div>
-        <div class="panel-body">
-          <legend><?=(isset($_POST['quick_release'])) ? $lang['quarantine']['release'] : $lang['quarantine']['remove'];?></legend>
-            <p><?=$lang['quarantine']['qhandler_success'];?></p>
-        </div>
-      </div>
-    </div>
-  </div> <!-- /row -->
-</div> <!-- /container -->
-<?php
-}
-elseif (in_array($_GET['action'], array('release', 'delete'))) {
-  if (preg_match("/^([a-f0-9]{64})$/", $_GET['hash'])) {
-    if ($_GET['action'] == "release"):
-?>
-<div class="container">
-  <div class="row">
-    <div class="col-md-offset-2 col-md-8">
-      <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span> <?= $lang['header']['quarantine']; ?></div>
-        <div class="panel-body">
-          <legend><?=$lang['quarantine']['release'];?></legend>
-            <form method="post" autofill="off">
-            <div class="form-group">
-              <button type="submit" class="btn btn-success" name="quick_release" value="<?=$_GET['hash'];?>"><?= $lang['tfa']['confirm']; ?></button>
-            </div>
-            </form>
-        </div>
-      </div>
-    </div>
-  </div> <!-- /row -->
-</div> <!-- /container -->
-<?php
-    elseif ($_GET['action'] == "delete"):
-?>
-<div class="container">
-  <div class="row">
-    <div class="col-md-offset-2 col-md-8">
-      <div class="panel panel-default">
-        <div class="panel-heading"><span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span> <?= $lang['header']['quarantine']; ?></div>
-        <div class="panel-body">
-          <legend><?=$lang['quarantine']['remove'];?></legend>
-            <form method="post" autofill="off">
-            <div class="form-group">
-              <button type="submit" class="btn btn-success" name="quick_delete" value="<?=$_GET['hash'];?>"><?= $lang['tfa']['confirm']; ?></button>
-            </div>
-            </form>
-        </div>
-      </div>
-    </div>
-  </div> <!-- /row -->
-</div> <!-- /container -->
-<?php
-    endif;
-  }
-}
+
+$js_minifier->add('/web/js/site/qhandler.js');
+
+$template = 'qhandler.twig';
+$template_data = [
+  'quick_release' => preg_match("/^([a-f0-9]{64})$/", $_POST['quick_release']),
+  'quick_delete' => preg_match("/^([a-f0-9]{64})$/", $_POST['quick_delete']),
+  'is_action_release_delete' => in_array($_GET['action'], array('release', 'delete')),
+  'is_hash_present' => preg_match("/^([a-f0-9]{64})$/", $_GET['hash']),
+  'action' => $_GET['action'],
+  'hash' => $_GET['hash'],
+  'lang_quarantine' => json_encode($lang['quarantine']),
+];
+
 require_once $_SERVER['DOCUMENT_ROOT'] . '/inc/footer.inc.php';
-?>
+

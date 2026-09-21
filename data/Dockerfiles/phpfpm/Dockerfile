@@ -1,13 +1,23 @@
-FROM php:7.3-fpm-alpine3.8
-LABEL maintainer "Andre Peters <andre.peters@servercow.de>"
+FROM php:8.2-fpm-alpine3.21
 
-ENV APCU_PECL 5.1.16
-ENV IMAGICK_PECL 3.4.3
-#ENV MAILPARSE_PECL 3.0.2
-ENV MEMCACHED_PECL 3.1.3
-ENV REDIS_PECL 4.2.0
+LABEL maintainer = "The Infrastructure Company GmbH <info@servercow.de>"
+
+# renovate: datasource=github-tags depName=krakjoe/apcu versioning=semver-coerced extractVersion=^v(?<version>.*)$
+ARG APCU_PECL_VERSION=5.1.28
+# renovate: datasource=github-tags depName=Imagick/imagick versioning=semver-coerced extractVersion=(?<version>.*)$
+ARG IMAGICK_PECL_VERSION=3.8.1
+# renovate: datasource=github-tags depName=php/pecl-mail-mailparse versioning=semver-coerced extractVersion=^v(?<version>.*)$
+ARG MAILPARSE_PECL_VERSION=3.2.0
+# renovate: datasource=github-tags depName=php-memcached-dev/php-memcached versioning=semver-coerced extractVersion=^v(?<version>.*)$
+ARG MEMCACHED_PECL_VERSION=3.4.0
+# renovate: datasource=github-tags depName=phpredis/phpredis versioning=semver-coerced extractVersion=(?<version>.*)$
+ARG REDIS_PECL_VERSION=6.3.0
+# renovate: datasource=github-tags depName=composer/composer versioning=semver-coerced extractVersion=(?<version>.*)$
+ARG COMPOSER_VERSION=2.10.2
 
 RUN apk add -U --no-cache autoconf \
+  aspell-dev \
+  aspell-libs \
   bash \
   c-client \
   cyrus-sasl-dev \
@@ -15,15 +25,21 @@ RUN apk add -U --no-cache autoconf \
   freetype-dev \
   g++ \
   git \
+  gettext \
   gettext-dev \
+  gmp-dev \
+  gnupg \
   icu-dev \
   icu-libs \
   imagemagick \
   imagemagick-dev \
   imap-dev \
   jq \
+  libavif \
+  libavif-dev \
   libjpeg-turbo \
   libjpeg-turbo-dev \
+  libmemcached \
   libmemcached-dev \
   libpng \
   libpng-dev \
@@ -33,8 +49,11 @@ RUN apk add -U --no-cache autoconf \
   libtool \
   libwebp-dev \
   libxml2-dev \
+  libxpm \
   libxpm-dev \
+  libzip \
   libzip-dev \
+  linux-headers \
   make \
   mysql-client \
   openldap-dev \
@@ -44,41 +63,52 @@ RUN apk add -U --no-cache autoconf \
   samba-client \
   zlib-dev \
   tzdata \
-  && git clone https://github.com/php/pecl-mail-mailparse \
-  && cd pecl-mail-mailparse \
-  && pecl install package.xml \
-  && cd .. \
-  && rm -r pecl-mail-mailparse \
-  && pecl install redis-${REDIS_PECL} memcached-${MEMCACHED_PECL} APCu-${APCU_PECL} imagick-${IMAGICK_PECL} \
+  && pecl install APCu-${APCU_PECL_VERSION} \
+  && pecl install imagick-${IMAGICK_PECL_VERSION} \
+  && pecl install mailparse-${MAILPARSE_PECL_VERSION} \
+  && pecl install memcached-${MEMCACHED_PECL_VERSION} \
+  && pecl install redis-${REDIS_PECL_VERSION} \
   && docker-php-ext-enable apcu imagick memcached mailparse redis \
   && pecl clear-cache \
   && docker-php-ext-configure intl \
-  && docker-php-ext-configure gd \
-    --with-gd \
-    --enable-gd-native-ttf \
-    --with-freetype-dir=/usr/include/ \
-    --with-png-dir=/usr/include/ \
-    --with-jpeg-dir=/usr/include/ \
-  && docker-php-ext-install -j 4 gd gettext intl ldap opcache pcntl pdo pdo_mysql soap sockets xmlrpc zip \
+  && docker-php-ext-configure exif \
+  && docker-php-ext-configure gd --with-freetype=/usr/include/ \  
+    --with-jpeg=/usr/include/ \
+    --with-webp \
+    --with-xpm \
+    --with-avif \
+  && docker-php-ext-install -j 4 exif gd gettext intl ldap opcache pcntl pdo pdo_mysql pspell soap sockets zip bcmath gmp \
   && docker-php-ext-configure imap --with-imap --with-imap-ssl \
   && docker-php-ext-install -j 4 imap \
+  && curl --silent --show-error https://getcomposer.org/installer | php -- --version=${COMPOSER_VERSION} \
+  && mv composer.phar /usr/local/bin/composer \
+  && chmod +x /usr/local/bin/composer \
   && apk del --purge autoconf \
+    aspell-dev \
     cyrus-sasl-dev \
     freetype-dev \
     g++ \
+    gettext-dev \
     icu-dev \
     imagemagick-dev \
     imap-dev \
+    libavif-dev \
     libjpeg-turbo-dev \
+    libmemcached-dev \
     libpng-dev \
     libressl-dev \
     libwebp-dev \
     libxml2-dev \
+    libxpm-dev \
+    libzip-dev \
+    linux-headers \
     make \
+    openldap-dev \
     pcre-dev \
     zlib-dev
 
 COPY ./docker-entrypoint.sh /
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
+
 CMD ["php-fpm"]

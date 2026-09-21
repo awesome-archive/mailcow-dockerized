@@ -3,20 +3,12 @@ var Base64={_keyStr:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456
 jQuery(function($){
   // http://stackoverflow.com/questions/24816/escaping-html-strings-with-jquery
   var entityMap={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;","/":"&#x2F;","`":"&#x60;","=":"&#x3D;"};
+  function jq(myid) {return "#" + myid.replace( /(:|\.|\[|\]|,|=|@)/g, "\\$1" );}
   function escapeHtml(n){return String(n).replace(/[&<>"'`=\/]/g,function(n){return entityMap[n]})}
+  function validateRegex(e){var t=e.split("/"),n=e,r="";t.length>1&&(n=t[1],r=t[2]);try{return new RegExp(n,r),!0}catch(e){return!1}}
   function humanFileSize(i){if(Math.abs(i)<1024)return i+" B";var B=["KiB","MiB","GiB","TiB","PiB","EiB","ZiB","YiB"],e=-1;do{i/=1024,++e}while(Math.abs(i)>=1024&&e<B.length-1);return i.toFixed(1)+" "+B[e]}
   function hashCode(t){for(var n=0,r=0;r<t.length;r++)n=t.charCodeAt(r)+((n<<5)-n);return n}
   function intToRGB(t){var n=(16777215&t).toString(16).toUpperCase();return"00000".substring(0,6-n.length)+n}
-  $("#rspamd_preset_1").on('click', function(e) {
-    e.preventDefault();
-    $("form[data-id=rsetting]").find("#adminRspamdSettingsDesc").val(lang.rsettings_preset_1);
-    $("form[data-id=rsetting]").find("#adminRspamdSettingsContent").val('priority = 10;\nauthenticated = yes;\napply "default" {\n  symbols_enabled = ["DKIM_SIGNED", "RATELIMITED", "RATELIMIT_UPDATE", "RATELIMIT_CHECK", "DYN_RL_CHECK", "HISTORY_SAVE", "MILTER_HEADERS", "ARC_SIGNED"];\n}');
-  });
-  $("#rspamd_preset_2").on('click', function(e) {
-    e.preventDefault();
-    $("form[data-id=rsetting]").find("#adminRspamdSettingsDesc").val(lang.rsettings_preset_2);
-    $("form[data-id=rsetting]").find("#adminRspamdSettingsContent").val('priority = 10;\nrcpt = "/postmaster@.*/";\nwant_spam = yes;');
-  });
   $("#dkim_missing_keys").on('click', function(e) {
     e.preventDefault();
      var domains = [];
@@ -29,192 +21,500 @@ jQuery(function($){
   $("#mass_exclude").change(function(){ $("#mass_include").selectpicker('deselectAll'); });
   $("#mass_include").change(function(){ $("#mass_exclude").selectpicker('deselectAll'); });
   $("#mass_disarm").click(function() { $("#mass_send").attr("disabled", !this.checked); });
+  $(".admin-ays-dialog").click(function() { return confirm(lang.ays); });
+  $(".validate_rspamd_regex").click(function( event ) {
+    event.preventDefault();
+    var regex_map_id = $(this).data('regex-map');
+    var regex_data = $(jq(regex_map_id)).val().split(/\r?\n/);
+    var regex_valid = true;
+    for(var i = 0;i < regex_data.length;i++){
+      if(regex_data[i].startsWith('#') || !regex_data[i]){
+        continue;
+      }
+      if(!validateRegex(regex_data[i])) {
+        mailcow_alert_box('Cannot build regex from line ' + (i+1), 'danger');
+        var regex_valid = false;
+        break;
+      }
+      if(!regex_data[i].startsWith('/') || !/\/[ims]?$/.test(regex_data[i])){
+        mailcow_alert_box('Line ' + (i+1) + ' is invalid', 'danger');
+        var regex_valid = false;
+        break;
+      }
+    }
+    if (regex_valid) {
+      mailcow_alert_box('Regex OK', 'success');
+      $('button[data-id="' + regex_map_id + '"]').attr({"disabled": false});
+    }
+  });
+  $('.textarea-code').on('keyup', function() {
+    $('.submit_rspamd_regex').attr({"disabled": true});
+  });
+  $("#show_rspamd_global_filters").click(function() {
+    $.get("/inc/ajax/show_rspamd_global_filters.php");
+    $("#confirm_show_rspamd_global_filters").hide();
+    $("#rspamd_global_filters").removeClass("d-none");
+    localStorage.setItem('rspamd_global_filters_confirmed', 'true');
+  });
+  
+  $(document).ready(function() {
+    if (localStorage.getItem('rspamd_global_filters_confirmed') === 'true') {
+      $("#confirm_show_rspamd_global_filters").hide();
+      $("#rspamd_global_filters").removeClass("d-none");
+    }
+  });
+  
   $("#super_delete").click(function() { return confirm(lang.queue_ays); });
+
   $(".refresh_table").on('click', function(e) {
     e.preventDefault();
     var table_name = $(this).data('table');
-    $('#' + table_name).find("tr.footable-empty").remove();
-    draw_table = $(this).data('draw');
-    eval(draw_table + '()');
+    $('#' + table_name).DataTable().ajax.reload();
   });
-  if (localStorage.getItem("current_page") === null) {
-    var current_page = {};
-  } else {
-    var current_page = JSON.parse(localStorage.getItem('current_page'));
-  }
-  function table_admin_ready(ft, name) {
-    heading = ft.$el.parents('.tab-pane').find('.panel-heading')
-    var ft_paging = ft.use(FooTable.Paging)
-    $(heading).children('.table-lines').text(function(){
-      return ft_paging.totalRows;
-    })
-  }
   function draw_domain_admins() {
-    ft_domainadmins = FooTable.init('#domainadminstable', {
-      "columns": [
-        {"name":"chkbox","title":"","style":{"maxWidth":"60px","width":"60px"},"filterable": false,"sortable": false,"type":"html"},
-        {"sorted": true,"name":"username","title":lang.username,"style":{"width":"250px"}},
-        {"name":"selected_domains","title":lang.admin_domains,"breakpoints":"xs sm"},
-        {"name":"tfa_active","title":"TFA", "filterable": false,"style":{"maxWidth":"80px","width":"80px"}},
-        {"name":"active","filterable": false,"style":{"maxWidth":"80px","width":"80px"},"title":lang.active},
-        {"name":"action","filterable": false,"sortable": false,"style":{"text-align":"right","maxWidth":"250px","width":"250px"},"type":"html","title":lang.action,"breakpoints":"xs sm"}
-      ],
-      "rows": $.ajax({
-        dataType: 'json',
-        url: '/api/v1/get/domain-admin/all',
-        jsonp: false,
-        error: function () {
-          console.log('Cannot draw domain admin table');
-        },
-        success: function (data) {
+    // just recalc width if instance already exists
+    if ($.fn.DataTable.isDataTable('#domainadminstable') ) {
+      $('#domainadminstable').DataTable().columns.adjust().responsive.recalc();
+      return;
+    }
+
+    $('#domainadminstable').DataTable({
+      responsive: true,
+      processing: true,
+      serverSide: false,
+      stateSave: true,
+      pageLength: pagination_size,
+      dom: "<'row'<'col-sm-12 col-md-6'f><'col-sm-12 col-md-6'l>>" +
+           "tr" +
+           "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+      language: lang_datatables,
+      ajax: {
+        type: "GET",
+        url: "/api/v1/get/domain-admin/all",
+        dataSrc: function(data){
           return process_table_data(data, 'domainadminstable');
         }
-      }),
-      "empty": lang.empty,
-      "paging": {"enabled": true,"limit": 5,"size": log_pagination_size},
-      "state": {"enabled": true},
-      "filtering": {"enabled": true,"delay": 1,"position": "left","connectors": false,"placeholder": lang.filter_table},
-      "sorting": {"enabled": true}
+      },
+      columns: [
+        {
+          // placeholder, so checkbox will not block child row toggle
+          title: '',
+          data: null,
+          searchable: false,
+          orderable: false,
+          defaultContent: ''
+        },
+        {
+          title: '',
+          data: 'chkbox',
+          searchable: false,
+          orderable: false,
+          defaultContent: ''
+        },
+        {
+          title: lang.username,
+          data: 'username',
+          defaultContent: ''
+        },
+        {
+          title: lang.admin_domains,
+          data: 'selected_domains',
+          defaultContent: '',
+        },
+        {
+          title: "TFA",
+          data: 'tfa_active',
+          defaultContent: '',
+            render: function (data, type) {
+            if(data == 1) return '<i class="bi bi-check-lg"><span class="sorting-value">1</span></i>';
+            else return '<i class="bi bi-x-lg"><span class="sorting-value">0</span></i>';
+          }
+        },
+        {
+          title: lang.active,
+          data: 'active',
+          defaultContent: '',
+          render: function (data, type) {
+            if(data == 1) return '<i class="bi bi-check-lg"><span class="sorting-value">1</span></i>';
+            else return '<i class="bi bi-x-lg"><span class="sorting-value">0</span></i>';
+          }
+        },
+        {
+          title: lang.action,
+          data: 'action',
+          className: 'dt-sm-head-hidden dt-text-right',
+          defaultContent: ''
+        },
+      ],
+      initComplete: function(settings, json){
+      }
+    });
+  }
+  function draw_oauth2_clients() {
+    // just recalc width if instance already exists
+    if ($.fn.DataTable.isDataTable('#oauth2clientstable') ) {
+      $('#oauth2clientstable').DataTable().columns.adjust().responsive.recalc();
+      return;
+    }
+
+    $('#oauth2clientstable').DataTable({
+      responsive: true,
+      processing: true,
+      serverSide: false,
+      stateSave: true,
+      pageLength: pagination_size,
+      dom: "<'row'<'col-sm-12 col-md-6'f><'col-sm-12 col-md-6'l>>" +
+           "tr" +
+           "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+      language: lang_datatables,
+      ajax: {
+        type: "GET",
+        url: "/api/v1/get/oauth2-client/all",
+        dataSrc: function(data){
+          return process_table_data(data, 'oauth2clientstable');
+        }
+      },
+      columns: [
+        {
+          // placeholder, so checkbox will not block child row toggle
+          title: '',
+          data: null,
+          searchable: false,
+          orderable: false,
+          defaultContent: ''
+        },
+        {
+          title: '',
+          data: 'chkbox',
+          searchable: false,
+          orderable: false,
+          defaultContent: ''
+        },
+        {
+          title: 'ID',
+          data: 'id',
+          defaultContent: ''
+        },
+        {
+          title: lang.oauth2_client_id,
+          data: 'client_id',
+          defaultContent: ''
+        },
+        {
+          title: lang.oauth2_client_secret,
+          data: 'client_secret',
+          defaultContent: ''
+        },
+        {
+          title: lang.oauth2_redirect_uri,
+          data: 'redirect_uri',
+          defaultContent: ''
+        },
+        {
+          title: lang.action,
+          data: 'action',
+          className: 'dt-sm-head-hidden dt-text-right',
+          defaultContent: ''
+        },
+      ]
     });
   }
   function draw_admins() {
-    ft_admins = FooTable.init('#adminstable', {
-      "columns": [
-        {"name":"chkbox","title":"","style":{"maxWidth":"60px","width":"60px"},"filterable": false,"sortable": false,"type":"html"},
-        {"sorted": true,"name":"usr","title":lang.username,"style":{"width":"250px"}},
-        {"name":"tfa_active","title":"TFA", "filterable": false,"style":{"maxWidth":"80px","width":"80px"}},
-        {"name":"active","filterable": false,"style":{"maxWidth":"80px","width":"80px"},"title":lang.active},
-        {"name":"action","filterable": false,"sortable": false,"style":{"text-align":"right","maxWidth":"250px","width":"250px"},"type":"html","title":lang.action,"breakpoints":"xs sm"}
-      ],
-      "rows": $.ajax({
-        dataType: 'json',
-        url: '/api/v1/get/admin/all',
-        jsonp: false,
-        error: function () {
-          console.log('Cannot draw admin table');
-        },
-        success: function (data) {
+    // just recalc width if instance already exists
+    if ($.fn.DataTable.isDataTable('#adminstable') ) {
+      $('#adminstable').DataTable().columns.adjust().responsive.recalc();
+      return;
+    }
+
+    $('#adminstable').DataTable({
+      responsive: true,
+      processing: true,
+      serverSide: false,
+      stateSave: true,
+      pageLength: pagination_size,
+      dom: "<'row'<'col-sm-12 col-md-6'f><'col-sm-12 col-md-6'l>>" +
+           "tr" +
+           "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+      language: lang_datatables,
+      ajax: {
+        type: "GET",
+        url: "/api/v1/get/admin/all",
+        dataSrc: function(data){
           return process_table_data(data, 'adminstable');
         }
-      }),
-      "empty": lang.empty,
-      "paging": {"enabled": true,"limit": 5,"size": log_pagination_size},
-      "filtering": {"enabled": false},
-      "state": {"enabled": true},
-      "sorting": {"enabled": true}
+      },
+      columns: [
+        {
+          // placeholder, so checkbox will not block child row toggle
+          title: '',
+          data: null,
+          searchable: false,
+          orderable: false,
+          defaultContent: ''
+        },
+        {
+          title: '',
+          data: 'chkbox',
+          searchable: false,
+          orderable: false,
+          defaultContent: ''
+        },
+        {
+          title: lang.username,
+          data: 'username',
+          defaultContent: ''
+        },
+        {
+          title: "TFA",
+          data: 'tfa_active',
+          defaultContent: '',
+          render: function (data, type) {
+            if(data == 1) return '<i class="bi bi-check-lg"><span class="sorting-value">1</span></i>';
+            else return '<i class="bi bi-x-lg"><span class="sorting-value">0</span></i>';
+          }
+        },
+        {
+          title: lang.active,
+          data: 'active',
+          defaultContent: '',
+          render: function (data, type) {
+            if(data == 1) return '<i class="bi bi-check-lg"><span class="sorting-value">1</span></i>';
+            else return '<i class="bi bi-x-lg"><span class="sorting-value">0</span></i>';
+          }
+        },
+        {
+          title: lang.action,
+          data: 'action',
+          defaultContent: '',
+          className: 'dt-sm-head-hidden dt-text-right'
+        },
+      ]
     });
   }
   function draw_fwd_hosts() {
-    ft_forwardinghoststable = FooTable.init('#forwardinghoststable', {
-      "columns": [
-        {"name":"chkbox","title":"","style":{"maxWidth":"60px","width":"60px"},"filterable": false,"sortable": false,"type":"html"},
-        {"name":"host","type":"text","title":lang.host,"style":{"width":"250px"}},
-        {"name":"source","title":lang.source,"breakpoints":"xs sm"},
-        {"name":"keep_spam","title":lang.spamfilter, "type": "text","style":{"maxWidth":"80px","width":"80px"}},
-        {"name":"action","filterable": false,"sortable": false,"style":{"text-align":"right","maxWidth":"180px","width":"180px"},"type":"html","title":lang.action,"breakpoints":"xs sm"}
-      ],
-      "rows": $.ajax({
-        dataType: 'json',
-        url: '/api/v1/get/fwdhost/all',
-        jsonp: false,
-        error: function () {
-          console.log('Cannot draw forwarding hosts table');
-        },
-        success: function (data) {
+    // just recalc width if instance already exists
+    if ($.fn.DataTable.isDataTable('#forwardinghoststable') ) {
+      $('#forwardinghoststable').DataTable().columns.adjust().responsive.recalc();
+      return;
+    }
+
+    $('#forwardinghoststable').DataTable({
+      responsive: true,
+      processing: true,
+      serverSide: false,
+      stateSave: true,
+      pageLength: pagination_size,
+      dom: "<'row'<'col-sm-12 col-md-6'f><'col-sm-12 col-md-6'l>>" +
+           "tr" +
+           "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+      language: lang_datatables,
+      ajax: {
+        type: "GET",
+        url: "/api/v1/get/fwdhost/all",
+        dataSrc: function(data){
           return process_table_data(data, 'forwardinghoststable');
         }
-      }),
-      "empty": lang.empty,
-      "paging": {"enabled": true,"limit": 5,"size": log_pagination_size},
-      "sorting": {"enabled": true}
+      },
+      columns: [
+        {
+          // placeholder, so checkbox will not block child row toggle
+          title: '',
+          data: null,
+          searchable: false,
+          orderable: false,
+          defaultContent: ''
+        },
+        {
+          title: '',
+          data: 'chkbox',
+          searchable: false,
+          orderable: false,
+          defaultContent: ''
+        },
+        {
+          title: lang.host,
+          data: 'host',
+          defaultContent: ''
+        },
+        {
+          title: lang.source,
+          data: 'source',
+          defaultContent: ''
+        },
+        {
+          title: lang.spamfilter,
+          data: 'keep_spam',
+          defaultContent: '',
+          render: function(data, type){
+            return 'yes'==data?'<i class="bi bi-x-lg"><span class="sorting-value">yes</span></i>':'no'==data&&'<i class="bi bi-check-lg"><span class="sorting-value">no</span></i>';
+          }
+        },
+        {
+          title: lang.action,
+          data: 'action',
+          className: 'dt-sm-head-hidden dt-text-right',
+          defaultContent: ''
+        },
+      ]
     });
   }
   function draw_relayhosts() {
-    ft_relayhoststable = FooTable.init('#relayhoststable', {
-      "columns": [
-        {"name":"chkbox","title":"","style":{"maxWidth":"60px","width":"60px"},"filterable": false,"sortable": false,"type":"html"},
-        {"name":"id","type":"text","title":"ID","style":{"width":"50px"}},
-        {"name":"hostname","type":"text","title":lang.host,"style":{"width":"250px"}},
-        {"name":"username","title":lang.username,"breakpoints":"xs sm"},
-        {"name":"used_by_domains","title":lang.in_use_by,"style":{"width":"110px"}, "type": "text","breakpoints":"xs sm"},
-        {"name":"active","filterable": false,"style":{"maxWidth":"80px","width":"80px"},"title":lang.active},
-        {"name":"action","filterable": false,"sortable": false,"style":{"text-align":"right","maxWidth":"220px","width":"220px"},"type":"html","title":lang.action,"breakpoints":"xs sm md"}
-      ],
-      "rows": $.ajax({
-        dataType: 'json',
-        url: '/api/v1/get/relayhost/all',
-        jsonp: false,
-        error: function () {
-          console.log('Cannot draw forwarding hosts table');
-        },
-        success: function (data) {
+    // just recalc width if instance already exists
+    if ($.fn.DataTable.isDataTable('#relayhoststable') ) {
+      $('#relayhoststable').DataTable().columns.adjust().responsive.recalc();
+      return;
+    }
+
+    $('#relayhoststable').DataTable({
+      responsive: true,
+      processing: true,
+      serverSide: false,
+      stateSave: true,
+      pageLength: pagination_size,
+      dom: "<'row'<'col-sm-12 col-md-6'f><'col-sm-12 col-md-6'l>>" +
+           "tr" +
+           "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+      language: lang_datatables,
+      ajax: {
+        type: "GET",
+        url: "/api/v1/get/relayhost/all",
+        dataSrc: function(data){
           return process_table_data(data, 'relayhoststable');
         }
-      }),
-      "empty": lang.empty,
-      "paging": {"enabled": true,"limit": 5,"size": log_pagination_size},
-      "sorting": {"enabled": true}
+      },
+      columns: [
+        {
+          // placeholder, so checkbox will not block child row toggle
+          title: '',
+          data: null,
+          searchable: false,
+          orderable: false,
+          defaultContent: ''
+        },
+        {
+          title: '',
+          data: 'chkbox',
+          searchable: false,
+          orderable: false,
+          defaultContent: ''
+        },
+        {
+          title: 'ID',
+          data: 'id',
+          defaultContent: ''
+        },
+        {
+          title: lang.host,
+          data: 'hostname',
+          defaultContent: '',
+          render: function (data, type) {
+            return escapeHtml(data);
+          }
+        },
+        {
+          title: lang.username,
+          data: 'username',
+          defaultContent: ''
+        },
+        {
+          title: lang.in_use_by,
+          data: 'in_use_by',
+          defaultContent: ''
+        },
+        {
+          title: lang.active,
+          data: 'active',
+          defaultContent: '',
+          render: function (data, type) {
+            if(data == 1) return '<i class="bi bi-check-lg"><span class="sorting-value">1</span></i>';
+            else return '<i class="bi bi-x-lg"><span class="sorting-value">0</span></i>';
+          }
+        },
+        {
+          title: lang.action,
+          data: 'action',
+          className: 'dt-sm-head-hidden dt-text-right',
+          defaultContent: ''
+        },
+      ]
     });
   }
   function draw_transport_maps() {
-    ft_relayhoststable = FooTable.init('#transportstable', {
-      "columns": [
-        {"name":"chkbox","title":"","style":{"maxWidth":"60px","width":"60px"},"filterable": false,"sortable": false,"type":"html"},
-        {"name":"id","type":"text","title":"ID","style":{"width":"50px"}},
-        {"name":"destination","type":"text","title":lang.destination,"style":{"width":"250px"}},
-        {"name":"nexthop","type":"text","title":lang.nexthop,"style":{"width":"250px"}},
-        {"name":"username","title":lang.username,"breakpoints":"xs sm"},
-        {"name":"active","filterable": false,"style":{"maxWidth":"80px","width":"80px"},"title":lang.active},
-        {"name":"action","filterable": false,"sortable": false,"style":{"text-align":"right","maxWidth":"220px","width":"220px"},"type":"html","title":lang.action,"breakpoints":"xs sm md"}
-      ],
-      "rows": $.ajax({
-        dataType: 'json',
-        url: '/api/v1/get/transport/all',
-        jsonp: false,
-        error: function () {
-          console.log('Cannot draw transports table');
-        },
-        success: function (data) {
+    // just recalc width if instance already exists
+    if ($.fn.DataTable.isDataTable('#transportstable') ) {
+      $('#transportstable').DataTable().columns.adjust().responsive.recalc();
+      return;
+    }
+
+    $('#transportstable').DataTable({
+      responsive: true,
+      processing: true,
+      serverSide: false,
+      stateSave: true,
+      pageLength: pagination_size,
+      dom: "<'row'<'col-sm-12 col-md-6'f><'col-sm-12 col-md-6'l>>" +
+           "tr" +
+           "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+      language: lang_datatables,
+      ajax: {
+        type: "GET",
+        url: "/api/v1/get/transport/all",
+        dataSrc: function(data){
           return process_table_data(data, 'transportstable');
         }
-      }),
-      "empty": lang.empty,
-      "paging": {"enabled": true,"limit": 5,"size": log_pagination_size},
-      "sorting": {"enabled": true}
-    });
-  }
-  function draw_queue() {
-    ft_queuetable = FooTable.init('#queuetable', {
-      "columns": [
-        {"name":"chkbox","title":"","style":{"maxWidth":"60px","width":"60px"},"filterable": false,"sortable": false,"type":"html"},
-        {"name":"queue_id","type":"text","title":"QID","style":{"width":"50px"}},
-        {"name":"queue_name","type":"text","title":"Queue","style":{"width":"120px"}},
-        {"name":"arrival_time","sorted": true,"direction": "DESC","formatter":function unix_time_format(tm) { var date = new Date(tm ? tm * 1000 : 0); return date.toLocaleString();},"title":lang.arrival_time,"style":{"width":"170px"}},
-        {"name":"message_size","style":{"whiteSpace":"nowrap"},"title":lang.message_size,"formatter": function(value){
-          return humanFileSize(value);
-        }},
-        {"name":"sender","title":lang.sender, "type": "text","breakpoints":"xs sm"},
-        {"name":"recipients","title":lang.recipients, "type": "text","style":{"word-break":"break-all","min-width":"300px"},"breakpoints":"xs sm md"},
-      ],
-      "rows": $.ajax({
-        dataType: 'json',
-        url: '/api/v1/get/mailq/all',
-        jsonp: false,
-        error: function () {
-          console.log('Cannot draw forwarding hosts table');
+      },
+      columns: [
+        {
+          // placeholder, so checkbox will not block child row toggle
+          title: '',
+          data: null,
+          searchable: false,
+          orderable: false,
+          defaultContent: ''
         },
-        success: function (data) {
-          return process_table_data(data, 'queuetable');
-        }
-      }),
-      "empty": lang.empty,
-      "paging": {"enabled": true,"limit": 5,"size": log_pagination_size},
-      "sorting": {"enabled": true},
-      "on": {
-        "ready.ft.table": function(e, ft){
-          table_admin_ready(ft, 'queuetable');
-        }
-      }
+        {
+          title: '',
+          data: 'chkbox',
+          searchable: false,
+          orderable: false,
+          defaultContent: ''
+        },
+        {
+          title: 'ID',
+          data: 'id',
+          defaultContent: ''
+        },
+        {
+          title: lang.destination,
+          data: 'destination',
+          defaultContent: ''
+        },
+        {
+          title: lang.nexthop,
+          data: 'nexthop',
+          defaultContent: ''
+        },
+        {
+          title: lang.username,
+          data: 'username',
+          defaultContent: ''
+        },
+        {
+          title: lang.active,
+          data: 'active',
+          defaultContent: '',
+          render: function (data, type) {
+            if(data == 1) return '<i class="bi bi-check-lg"><span class="sorting-value">1</span></i>';
+            else return '<i class="bi bi-x-lg"><span class="sorting-value">0</span></i>';
+          }
+        },
+        {
+          title: lang.action,
+          data: 'action',
+          className: 'dt-sm-head-hidden dt-text-right',
+          defaultContent: ''
+        },
+      ]
     });
   }
 
@@ -222,79 +522,133 @@ jQuery(function($){
     if (table == 'relayhoststable') {
       $.each(data, function (i, item) {
         item.action = '<div class="btn-group">' +
-          '<a href="#" data-toggle="modal" data-target="#testTransportModal" data-transport-id="' + encodeURI(item.id) + '" data-transport-type="sender-dependent" class="btn btn-xs btn-default"><span class="glyphicon glyphicon-triangle-right"></span> Test</a>' +
-          '<a href="/edit/relayhost/' + encodeURI(item.id) + '" class="btn btn-xs btn-default"><span class="glyphicon glyphicon-pencil"></span> ' + lang.edit + '</a>' +
-          '<a href="#" data-action="delete_selected" data-id="single-rlyhost" data-api-url="delete/relayhost" data-item="' + encodeURI(item.id) + '" class="btn btn-xs btn-danger"><span class="glyphicon glyphicon-trash"></span> ' + lang.remove + '</a>' +
+          '<a href="#" data-bs-toggle="modal" data-bs-target="#testTransportModal" data-transport-id="' + encodeURI(item.id) + '" data-transport-type="sender-dependent" class="btn btn-xs btn-xs-lg btn-xs-third btn-secondary"><i class="bi bi-caret-right-fill"></i> Test</a>' +
+          '<a href="/edit/relayhost/' + encodeURI(item.id) + '" class="btn btn-xs btn-xs-lg btn-xs-third btn-secondary"><i class="bi bi-pencil-fill"></i> ' + lang.edit + '</a>' +
+          '<a href="#" data-action="delete_selected" data-id="single-rlyhost" data-api-url="delete/relayhost" data-item="' + encodeURI(item.id) + '" class="btn btn-xs btn-xs-lg btn-xs-third btn-danger"><i class="bi bi-trash"></i> ' + lang.remove + '</a>' +
           '</div>';
-        item.chkbox = '<input type="checkbox" data-id="rlyhosts" name="multi_select" value="' + item.id + '" />';
+        if (item.used_by_mailboxes == '') { item.in_use_by = item.used_by_domains; }
+        else if (item.used_by_domains == '') { item.in_use_by = item.used_by_mailboxes; }
+        else { item.in_use_by = item.used_by_mailboxes + '<hr style="margin:5px 0px 5px 0px;">' + item.used_by_domains; }
+        item.chkbox = '<input type="checkbox" class="form-check-input" data-id="rlyhosts" name="multi_select" value="' + item.id + '" />';
       });
     } else if (table == 'transportstable') {
       $.each(data, function (i, item) {
+        if (item.is_mx_based) {
+          item.destination = '<i class="bi bi-info-circle-fill text-info mx-info" data-bs-toggle="tooltip" title="' + lang.is_mx_based + '"></i> <code>' + item.destination + '</code>';
+        }
         if (item.username) {
-          item.username = '<span style="border-left:3px solid #' + intToRGB(hashCode(item.nexthop)) + ';padding-left:5px;">' + item.username + '</span>';
+          item.username = '<i style="color:#' + intToRGB(hashCode(item.nexthop)) + ';" class="bi bi-square-fill"></i> ' + item.username;
         }
         item.action = '<div class="btn-group">' +
-          '<a href="#" data-toggle="modal" data-target="#testTransportModal" data-transport-id="' + encodeURI(item.id) + '" data-transport-type="transport-map" class="btn btn-xs btn-default"><span class="glyphicon glyphicon-triangle-right"></span> Test</a>' +
-          '<a href="/edit/transport/' + encodeURI(item.id) + '" class="btn btn-xs btn-default"><span class="glyphicon glyphicon-pencil"></span> ' + lang.edit + '</a>' +
-          '<a href="#" data-action="delete_selected" data-id="single-transport" data-api-url="delete/transport" data-item="' + encodeURI(item.id) + '" class="btn btn-xs btn-danger"><span class="glyphicon glyphicon-trash"></span> ' + lang.remove + '</a>' +
+          '<a href="#" data-bs-toggle="modal" data-bs-target="#testTransportModal" data-transport-id="' + encodeURI(item.id) + '" data-transport-type="transport-map" class="btn btn-xs btn-xs-lg btn-xs-third btn-secondary"><i class="bi bi-caret-right-fill"></i> Test</a>' +
+          '<a href="/edit/transport/' + encodeURI(item.id) + '" class="btn btn-xs btn-xs-lg btn-xs-third btn-secondary"><i class="bi bi-pencil-fill"></i> ' + lang.edit + '</a>' +
+          '<a href="#" data-action="delete_selected" data-id="single-transport" data-api-url="delete/transport" data-item="' + encodeURI(item.id) + '" class="btn btn-xs btn-xs-lg btn-xs-third btn-danger"><i class="bi bi-trash"></i> ' + lang.remove + '</a>' +
           '</div>';
-        item.chkbox = '<input type="checkbox" data-id="transports" name="multi_select" value="' + item.id + '" />';
+        item.chkbox = '<input type="checkbox" class="form-check-input" data-id="transports" name="multi_select" value="' + item.id + '" />';
       });
     } else if (table == 'queuetable') {
       $.each(data, function (i, item) {
-        item.chkbox = '<input type="checkbox" data-id="mailqitems" name="multi_select" value="' + item.queue_id + '" />';
+        item.chkbox = '<input type="checkbox" class="form-check-input" data-id="mailqitems" name="multi_select" value="' + item.queue_id + '" />';
         rcpts = $.map(item.recipients, function(i) {
           return escapeHtml(i);
         });
         item.recipients = rcpts.join('<hr style="margin:1px!important">');
+        item.action = '<div class="btn-group">' +
+          '<a href="#" data-bs-toggle="modal" data-bs-target="#showQueuedMsg" data-queue-id="' + encodeURI(item.queue_id) + '" class="btn btn-xs btn-xs-lg btn-secondary">' + lang.queue_show_message + '</a>' +
+          '</div>';
       });
     } else if (table == 'forwardinghoststable') {
       $.each(data, function (i, item) {
         item.action = '<div class="btn-group">' +
-          '<a href="#" data-action="delete_selected" data-id="single-fwdhost" data-api-url="delete/fwdhost" data-item="' + encodeURI(item.host) + '" class="btn btn-xs btn-danger"><span class="glyphicon glyphicon-trash"></span> ' + lang.remove + '</a>' +
+          '<a href="#" data-action="delete_selected" data-id="single-fwdhost" data-api-url="delete/fwdhost" data-item="' + encodeURI(item.host) + '" class="btn btn-xs btn-xs-lg btn-danger"><i class="bi bi-trash"></i> ' + lang.remove + '</a>' +
           '</div>';
-        if (item.keep_spam == "yes") {
-          item.keep_spam = lang.no;
-        }
-        else {
-          item.keep_spam = lang.yes;
-        }
-        item.chkbox = '<input type="checkbox" data-id="fwdhosts" name="multi_select" value="' + item.host + '" />';
+        item.chkbox = '<input type="checkbox" class="form-check-input" data-id="fwdhosts" name="multi_select" value="' + item.host + '" />';
+      });
+    } else if (table == 'oauth2clientstable') {
+      $.each(data, function (i, item) {
+        item.action = '<div class="btn-group">' +
+          '<a href="/edit/oauth2client/' + encodeURI(item.id) + '" class="btn btn-xs btn-xs-lg btn-xs-half btn-secondary"><i class="bi bi-pencil-fill"></i> ' + lang.edit + '</a>' +
+          '<a href="#" data-action="delete_selected" data-id="single-oauth2-client" data-api-url="delete/oauth2-client" data-item="' + encodeURI(item.id) + '" class="btn btn-xs btn-xs-lg btn-xs-half btn-danger"><i class="bi bi-trash"></i> ' + lang.remove + '</a>' +
+          '</div>';
+        item.scope = "profile";
+        item.grant_types = 'refresh_token password authorization_code';
+        item.chkbox = '<input type="checkbox" class="form-check-input" data-id="oauth2_clients" name="multi_select" value="' + item.id + '" />';
       });
     } else if (table == 'domainadminstable') {
       $.each(data, function (i, item) {
         item.selected_domains = escapeHtml(item.selected_domains);
         item.selected_domains = item.selected_domains.toString().replace(/,/g, "<br>");
-        item.chkbox = '<input type="checkbox" data-id="domain_admins" name="multi_select" value="' + item.username + '" />';
+        item.chkbox = '<input type="checkbox" class="form-check-input" data-id="domain_admins" name="multi_select" value="' + item.username + '" />';
         item.action = '<div class="btn-group">' +
-          '<a href="/edit/domainadmin/' + encodeURI(item.username) + '" class="btn btn-xs btn-default"><span class="glyphicon glyphicon-pencil"></span> ' + lang.edit + '</a>' +
-          '<a href="#" data-action="delete_selected" data-id="single-domain-admin" data-api-url="delete/domain-admin" data-item="' + encodeURI(item.username) + '" class="btn btn-xs btn-danger"><span class="glyphicon glyphicon-trash"></span> ' + lang.remove + '</a>' +
-          '<a href="/index.php?duallogin=' + encodeURIComponent(item.username) + '" class="btn btn-xs btn-success"><span class="glyphicon glyphicon-user"></span> Login</a>' +
+          '<a href="/edit/domainadmin/' + encodeURI(item.username) + '" class="btn btn-xs btn-xs-lg btn-xs-third btn-secondary"><i class="bi bi-pencil-fill"></i> ' + lang.edit + '</a>' +
+          '<a href="#" data-action="delete_selected" data-id="single-domain-admin" data-api-url="delete/domain-admin" data-item="' + encodeURI(item.username) + '" class="btn btn-xs btn-xs-lg btn-xs-third btn-danger"><i class="bi bi-trash"></i> ' + lang.remove + '</a>' +
+          '<a href="/domainadmin/?duallogin=' + encodeURIComponent(item.username) + '" class="btn btn-xs btn-xs-lg btn-xs-third btn-success"><i class="bi bi-person-fill"></i> Login</a>' +
           '</div>';
       });
     } else if (table == 'adminstable') {
       $.each(data, function (i, item) {
-        if (admin_username == item.username) {
-          item.usr = '→ ' + item.username;
+        if (admin_username.toLowerCase() == item.username.toLowerCase()) {
+          item.usr = '<i class="bi bi-person-check"></i> ' + item.username;
         } else {
           item.usr = item.username;
         }
-        item.chkbox = '<input type="checkbox" data-id="admins" name="multi_select" value="' + item.username + '" />';
+        item.chkbox = '<input type="checkbox" class="form-check-input" data-id="admins" name="multi_select" value="' + item.username + '" />';
         item.action = '<div class="btn-group">' +
-          '<a href="/edit/admin/' + encodeURI(item.username) + '" class="btn btn-xs btn-default"><span class="glyphicon glyphicon-pencil"></span> ' + lang.edit + '</a>' +
-          '<a href="#" data-action="delete_selected" data-id="single-admin" data-api-url="delete/admin" data-item="' + encodeURI(item.username) + '" class="btn btn-xs btn-danger"><span class="glyphicon glyphicon-trash"></span> ' + lang.remove + '</a>' +
+          '<a href="/edit/admin/' + encodeURI(item.username) + '" class="btn btn-xs btn-xs-lg btn-xs-half btn-secondary"><i class="bi bi-pencil-fill"></i> ' + lang.edit + '</a>' +
+          '<a href="#" data-action="delete_selected" data-id="single-admin" data-api-url="delete/admin" data-item="' + encodeURI(item.username) + '" class="btn btn-xs btn-xs-lg btn-xs-half btn-danger"><i class="bi bi-trash"></i> ' + lang.remove + '</a>' +
           '</div>';
       });
     }
     return data
   };
-  // Initial table drawings
-  draw_domain_admins();
-  draw_admins();
-  draw_fwd_hosts();
-  draw_relayhosts();
-  draw_transport_maps();
-  draw_queue();
+
+  // detect element visibility changes
+  function onVisible(element, callback) {
+    $(document).ready(function() {
+      element_object = document.querySelector(element);
+      if (element_object === null) return;
+
+      new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+          if(entry.intersectionRatio > 0) {
+            callback(element_object);
+          }
+        });
+      }).observe(element_object);
+    });
+  }
+  // Draw Table if tab is active
+  onVisible("[id^=adminstable]", () => draw_admins());
+  onVisible("[id^=domainadminstable]", () => draw_domain_admins());
+  onVisible("[id^=oauth2clientstable]", () => draw_oauth2_clients());
+  onVisible("[id^=forwardinghoststable]", () => draw_fwd_hosts());
+  onVisible("[id^=relayhoststable]", () => draw_relayhosts());
+  onVisible("[id^=transportstable]", () => draw_transport_maps());
+
+
+  $('body').on('click', 'span.footable-toggle', function () {
+    event.stopPropagation();
+  })
+
+  // API IP check toggle
+  $("#skip_ip_check_ro").click(function( event ) {
+   $("#skip_ip_check_ro").not(this).prop('checked', false);
+    if ($("#skip_ip_check_ro:checked").length > 0) {
+      $('#allow_from_ro').prop('disabled', true);
+    }
+    else {
+      $("#allow_from_ro").removeAttr('disabled');
+    }
+  });
+  $("#skip_ip_check_rw").click(function( event ) {
+   $("#skip_ip_check_rw").not(this).prop('checked', false);
+    if ($("#skip_ip_check_rw:checked").length > 0) {
+      $('#allow_from_rw').prop('disabled', true);
+    }
+    else {
+      $("#allow_from_rw").removeAttr('disabled');
+    }
+  });
   // Relayhost
   $('#testRelayhostModal').on('show.bs.modal', function (e) {
     $('#test_relayhost_result').text("-");
@@ -307,17 +661,17 @@ jQuery(function($){
     e.preventDefault();
     prev = $('#test_relayhost').text();
     $(this).prop("disabled",true);
-    $(this).html('<span class="glyphicon glyphicon-refresh glyphicon-spin"></span> ');
+    $(this).html('<i class="bi bi-arrow-repeat icon-spin"></i> ');
     $.ajax({
-        type: 'GET',
-        url: 'inc/ajax/relay_check.php',
-        dataType: 'text',
-        data: $('#test_relayhost_form').serialize(),
-        complete: function (data) {
-          $('#test_relayhost_result').html(data.responseText);
-          $('#test_relayhost').prop("disabled",false);
-          $('#test_relayhost').text(prev);
-        }
+      type: 'GET',
+      url: '/inc/ajax/relay_check.php',
+      dataType: 'text',
+      data: $('#test_relayhost_form').serialize(),
+      complete: function (data) {
+        $('#test_relayhost_result').html(data.responseText);
+        $('#test_relayhost').prop("disabled",false);
+        $('#test_relayhost').text(prev);
+      }
     });
   })
   // Transport
@@ -333,17 +687,17 @@ jQuery(function($){
     e.preventDefault();
     prev = $('#test_transport').text();
     $(this).prop("disabled",true);
-    $(this).html('<span class="glyphicon glyphicon-refresh glyphicon-spin"></span> ');
+    $(this).html('<div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div> ');
     $.ajax({
-        type: 'GET',
-        url: 'inc/ajax/transport_check.php',
-        dataType: 'text',
-        data: $('#test_transport_form').serialize(),
-        complete: function (data) {
-          $('#test_transport_result').html(data.responseText);
-          $('#test_transport').prop("disabled",false);
-          $('#test_transport').text(prev);
-        }
+      type: 'GET',
+      url: '/inc/ajax/transport_check.php',
+      dataType: 'text',
+      data: $('#test_transport_form').serialize(),
+      complete: function (data) {
+        $('#test_transport_result').html(data.responseText);
+        $('#test_transport').prop("disabled",false);
+        $('#test_transport').text(prev);
+      }
     });
   })
   // DKIM private key modal
@@ -355,41 +709,166 @@ jQuery(function($){
       $('#priv_key_pre').text(decoded_key);
     }
   })
+  // FIDO2 friendly name modal
+  $('#fido2ChangeFn').on('show.bs.modal', function (e) {
+    rename_link = $(e.relatedTarget)
+    if (rename_link != null) {
+      $('#fido2_cid').val(rename_link.data('cid'));
+      $('#fido2_subject_desc').text(Base64.decode(rename_link.data('subject')));
+    }
+  })
   // App links
-  function add_table_row(table_id) {
+  // setup eventlistener
+  setAppHideEvent();
+  function setAppHideEvent(){
+    $('.app_hide').off('change');
+    $('.app_hide').on('change', function (e) {
+      var value = $(this).is(':checked') ? '1' : '0';
+      $(this).parent().children(':first-child').val(value);
+    })
+  }
+  function add_table_row(table_id, type) {
     var row = $('<tr />');
-    cols = '<td><input class="input-sm form-control" data-id="app_links" type="text" name="app" required></td>';
-    cols += '<td><input class="input-sm form-control" data-id="app_links" type="text" name="href" required></td>';
-    cols += '<td><a href="#" role="button" class="btn btn-xs btn-default" type="button">Remove row</a></td>';
+    if (type == "app_link") {
+      cols = '<td><input class="input-sm input-xs-lg form-control" data-id="app_links" type="text" name="app" required></td>';
+      cols += '<td><input class="input-sm input-xs-lg form-control" data-id="app_links" type="text" name="href" required></td>';
+      cols += '<td><input class="input-sm input-xs-lg form-control" data-id="app_links" type="text" name="user_href" required></td>';
+      cols += '<td><div class="d-flex align-items-center justify-content-center" style="height: 33.5px"><input data-id="app_links" type="hidden" name="hide" value="0"><input class="form-check-input app_hide" type="checkbox" value="1"></div></td>';
+      cols += '<td><a href="#" role="button" class="btn btn-sm btn-xs-lg btn-secondary h-100 w-100" type="button">' + lang.remove_row + '</a></td>';
+    } else if (type == "f2b_regex") {
+      cols = '<td><input style="text-align:center" class="input-sm input-xs-lg form-control" data-id="f2b_regex" type="text" value="+" disabled></td>';
+      cols += '<td><input class="input-sm input-xs-lg form-control regex-input" data-id="f2b_regex" type="text" name="regex" required></td>';
+      cols += '<td><a href="#" role="button" class="btn btn-sm btn-xs-lg btn-secondary h-100 w-100" type="button">' + lang.remove_row + '</a></td>';
+    }
+
     row.append(cols);
     table_id.append(row);
+    if (type == "app_link")
+      setAppHideEvent();
   }
   $('#app_link_table').on('click', 'tr a', function (e) {
     e.preventDefault();
     $(this).parents('tr').remove();
   });
-  $('#add_app_link_row').click(function() {
-      add_table_row($('#app_link_table'));
+  $('#f2b_regex_table').on('click', 'tr a', function (e) {
+    e.preventDefault();
+    $(this).parents('tr').remove();
   });
-});
-$(window).load(function(){
-  initial_width = $("#sidebar-admin").width();
-  $("#scrollbox").css("width", initial_width);
-  if (sessionStorage.scrollTop > 70) {
-    $('#scrollbox').addClass('scrollboxFixed');
-  }
-  $(window).bind('scroll', function() {
-    if ($(window).scrollTop() > 70) {
-      $('#scrollbox').addClass('scrollboxFixed');
-    } else {
-      $('#scrollbox').removeClass('scrollboxFixed');
+  $('#add_app_link_row').click(function() {
+    add_table_row($('#app_link_table'), "app_link");
+  });
+  $('#add_f2b_regex_row').click(function() {
+    add_table_row($('#f2b_regex_table'), "f2b_regex");
+  });
+  // IAM test connection
+  $('.iam_test_connection').click(async function(e){
+    e.preventDefault();
+    var data = { attr: $('form[data-id="' + $(this).data('id') + '"]').serializeObject() };
+    var res = await fetch("/api/v1/edit/identity-provider-test", {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method:'POST',
+      cache:'no-cache',
+      body: JSON.stringify(data)
+    });
+    res = await res.json();
+    if (res.type === 'success'){
+      return mailcow_alert_box(lang_success.iam_test_connection, 'success');
+    }
+    return mailcow_alert_box(lang_danger.iam_test_connection, 'danger');
+  });
+
+  $('.iam_rolemap_add_keycloak').click(async function(e){
+    addAttributeMappingRow('#iam_keycloak_mapping_list', '.iam_keycloak_rolemap_del', e);
+  });
+  $('.iam_rolemap_add_generic').click(async function(e){
+    addAttributeMappingRow('#iam_generic_mapping_list', '.iam_generic_rolemap_del', e);
+  });
+  $('.iam_rolemap_add_ldap').click(async function(e){
+    addAttributeMappingRow('#iam_ldap_mapping_list', '.iam_ldap_rolemap_del', e);
+  });
+  $('.iam_keycloak_rolemap_del').click(async function(e){
+    deleteAttributeMappingRow(this, e);
+  });
+  $('.iam_generic_rolemap_del').click(async function(e){
+    deleteAttributeMappingRow(this, e);
+  });
+  $('.iam_ldap_rolemap_del').click(async function(e){
+    deleteAttributeMappingRow(this, e);
+  });
+  $('.iam_redirect_add_keycloak').click(async function(e){
+    addRedirectUrlRow('#iam_keycloak_redirect_list', '.iam_keycloak_redirect_del', e);
+  });
+  $('.iam_redirect_add_generic').click(async function(e){
+    addRedirectUrlRow('#iam_generic_redirect_list', '.iam_generic_redirect_del', e);
+  });
+  $('.iam_keycloak_redirect_del').click(async function(e){
+    deleteRedirectUrlRow(this, e);
+  });
+  $('.iam_generic_redirect_del').click(async function(e){
+    deleteRedirectUrlRow(this, e);
+  });
+  // selecting identity provider
+  $('#iam_provider').on('change', function(){
+    // toggle password fields
+    if (this.value === 'keycloak'){
+      $('#keycloak_settings').removeClass('d-none');
+      $('#generic_oidc_settings').addClass('d-none');
+      $('#ldap_settings').addClass('d-none');
+    } else if (this.value === 'generic-oidc') {
+      $('#generic_oidc_settings').removeClass('d-none');
+      $('#keycloak_settings').addClass('d-none');
+      $('#ldap_settings').addClass('d-none');
+    } else if (this.value === 'ldap') {
+      $('#ldap_settings').removeClass('d-none');
+      $('#generic_oidc_settings').addClass('d-none');
+      $('#keycloak_settings').addClass('d-none');
     }
   });
+  function addAttributeMappingRow(list_id, del_class, e) {
+    e.preventDefault();
+
+    var parent = $(list_id)
+    $(parent).children().last().clone().appendTo(parent);
+    var newChild = $(parent).children().last();
+    $(newChild).find('input').val('');
+    $(newChild).find('input').val('').prop('required', true);
+    $(newChild).find('.dropdown-toggle').remove();
+    $(newChild).find('.dropdown-menu').remove();
+    $(newChild).find('.bs-title-option').remove();
+    $(newChild).find('select').selectpicker('destroy');
+    $(newChild).find('select').selectpicker();
+    $(newChild).find('select').selectpicker().prop('required', true);
+
+    $(del_class).off('click');
+    $(del_class).click(async function(e){
+      deleteAttributeMappingRow(this, e);
+    });
+  }
+  function deleteAttributeMappingRow(elem, e) {
+    e.preventDefault();
+    if(!$(elem).parent().parent().parent().find('select').prop('required'))
+      return true;
+    if ($(elem).parent().parent().parent().parent().children().length > 1)
+      $(elem).parent().parent().parent().remove();
+  }
+  function addRedirectUrlRow(list_id, del_class, e) {
+    e.preventDefault();
+
+    var parent = $(list_id)
+    $(parent).children().last().clone().appendTo(parent);
+    var newChild = $(parent).children().last();
+    $(newChild).find('input').val('');
+
+    $(del_class).off('click');
+    $(del_class).click(async function(e){
+      deleteRedirectUrlRow(this, e);
+    });
+  }
+  function deleteRedirectUrlRow(elem, e) {
+    e.preventDefault();
+    if ($(elem).parent().parent().parent().parent().children().length > 2)
+      $(elem).parent().parent().parent().remove();
+  }
 });
-function resizeScrollbox() {
-  on_resize_width = $("#sidebar-admin").width();
-  $("#scrollbox").removeAttr("style");
-  $("#scrollbox").css("width", on_resize_width);
-}
-$(window).on('resize', resizeScrollbox);
-$('a[data-toggle="tab"]').on('shown.bs.tab', resizeScrollbox);

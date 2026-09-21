@@ -4,28 +4,21 @@ declare(strict_types=1);
 
 namespace Ddeboer\Imap\Message;
 
+/**
+ * @extends \ArrayIterator<int|string, int|string|\stdClass[]>
+ */
 class Parameters extends \ArrayIterator
 {
     /**
-     * @var array
+     * @var array<string, string>
      */
-    private static $attachmentCustomKeys = [
-        'name*' => 'name',
+    private static array $attachmentCustomKeys = [
+        'name*'     => 'name',
         'filename*' => 'filename',
     ];
 
     /**
-     * @param array $parameters
-     */
-    public function __construct(array $parameters = [])
-    {
-        parent::__construct();
-
-        $this->add($parameters);
-    }
-
-    /**
-     * @param array $parameters
+     * @param \stdClass[] $parameters
      */
     public function add(array $parameters = []): void
     {
@@ -34,28 +27,19 @@ class Parameters extends \ArrayIterator
             if (isset(self::$attachmentCustomKeys[$key])) {
                 $key = self::$attachmentCustomKeys[$key];
             }
-            $value = $this->decode($parameter->value);
+            $value      = $this->decode($parameter->value);
             $this[$key] = $value;
         }
     }
 
     /**
-     * @param string $key
-     *
-     * @return mixed
+     * @return null|int|\stdClass[]|string
      */
     public function get(string $key)
     {
         return $this[$key] ?? null;
     }
 
-    /**
-     * Decode value.
-     *
-     * @param string $value
-     *
-     * @return string
-     */
     final protected function decode(string $value): string
     {
         $parts = \imap_mime_header_decode($value);
@@ -71,8 +55,8 @@ class Parameters extends \ArrayIterator
             }
             // RFC2231
             if (1 === \preg_match('/^(?<encoding>[^\']+)\'[^\']*?\'(?<urltext>.+)$/', $text, $matches)) {
-                $hasInvalidChars = \preg_match('#[^%a-zA-Z0-9\-_\.\+]#', $matches['urltext']);
-                $hasEscapedChars = \preg_match('#%[a-zA-Z0-9]{2}#', $matches['urltext']);
+                $hasInvalidChars = 1 === \preg_match('#[^%a-zA-Z0-9\-_\.\+]#', $matches['urltext']);
+                $hasEscapedChars = 1 === \preg_match('#%[a-zA-Z0-9]{2}#', $matches['urltext']);
                 if (!$hasInvalidChars && $hasEscapedChars) {
                     $text = Transcoder::decode(\urldecode($matches['urltext']), $matches['encoding']);
                 }

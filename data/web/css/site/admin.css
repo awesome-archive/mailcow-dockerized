@@ -1,20 +1,14 @@
-table.footable>tbody>tr.footable-empty>td {
-  font-size:15px !important;
-  font-style:italic;
-}
 .pagination a {
   text-decoration: none !important;
 }
-.panel panel-default {
+.panel.panel-default {
   overflow: visible !important;
 }
 .table-responsive {
   overflow: visible !important;
 }
-@media screen and (max-width: 767px) {
-  .table-responsive {
-    overflow-x: scroll !important;
-  }
+.table-responsive {
+  overflow-x: scroll !important;
 }
 body {
   overflow-y:scroll;
@@ -31,7 +25,6 @@ body.modal-open {
 }
 .mass-actions-admin {
   user-select: none;
-  padding:10px 0 10px 0;
 }
 .inputMissingAttr {
   border-color: #FF4136;
@@ -53,11 +46,6 @@ body.modal-open {
   margin-top: -65px;
   visibility: hidden;
 }
-.scrollboxFixed {
-  position: fixed;
-  top: 65px;
-  z-index: 1;
-}
 .thumbnail img {
   min-height:100px;
   height:100px;
@@ -66,8 +54,30 @@ body.modal-open {
   z-index: 1;
 }
 .table-condensed .input-sm {
-  width: 100%!important;  
+  width: 100%!important;
 }
 .table-condensed > thead > tr > th, .table-condensed > tbody > tr > th, .table-condensed > tfoot > tr > th, .table-condensed > thead > tr > td, .table-condensed > tbody > tr > td, .table-condensed > tfoot > tr > td {
   padding: 3px;
+}
+table tbody tr td input[type="checkbox"] {
+  cursor: pointer;
+}
+#quarantine_template {
+  margin:20px;
+}
+.regex-input {
+  font-family: Consolas,monaco,monospace;
+  font-size: 1rem;
+}
+.label-keys {
+  font-size:100%;
+  margin: 0px !important;
+  white-space: normal !important;
+}
+.key-action {
+  font-weight:bold;
+  color:white !important;
+}
+.dkim-label {
+  margin: 0 0 8px !important;
 }
